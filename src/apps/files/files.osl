@@ -1,0 +1,225 @@
+# files.osl — the file manager. Talks to the VFS through the fs namespace.
+
+let cwd = args.get("path")
+if cwd == None or cwd == "":
+    cwd = "/home/user"
+cwd = fs.normalize(cwd)
+let history = [cwd]
+let hidx = 0
+let query = ""
+let view = "grid"
+let sel = ""
+let entries = []
+
+fn load():
+    entries = []
+    let all = fs.list(cwd)
+    for f in all:
+        if f.name.startswith("."):
+            continue
+        if query == "":
+            entries.append(f)
+        elif f.name.lower().find(query.lower()) >= 0:
+            entries.append(f)
+
+fn sizeText(f):
+    if f.type == "dir":
+        return ""
+    return fs.sizeText(f.size)
+
+fn dateText(f):
+    return time.format(f.mtime, "MMM d, HH:mm")
+
+fn iconFor(f):
+    if f.type == "dir":
+        return "folder"
+    if f.ext == "osl":
+        return "code"
+    if f.ext == "oml":
+        return "layers"
+    if f.ext == "desktop":
+        return "apps"
+    if f.ext == "md" or f.ext == "txt":
+        return "file-text"
+    if f.ext == "png" or f.ext == "jpg" or f.ext == "svg":
+        return "image"
+    return "file"
+
+fn setTitle():
+    win.setTitle(t("Files") + " — " + paths.relative(cwd))
+
+fn go(p):
+    let target = fs.normalize(p)
+    if not fs.isDir(target):
+        return
+    cwd = target
+    if hidx < len(history) - 1:
+        history = history[:hidx + 1]
+    history.append(cwd)
+    hidx = len(history) - 1
+    sel = ""
+    query = ""
+    load()
+    setTitle()
+    refresh()
+
+fn back():
+    if hidx > 0:
+        hidx -= 1
+        cwd = history[hidx]
+        sel = ""
+        load()
+        setTitle()
+        refresh()
+
+fn fwd():
+    if hidx < len(history) - 1:
+        hidx += 1
+        cwd = history[hidx]
+        sel = ""
+        load()
+        setTitle()
+        refresh()
+
+fn up():
+    if cwd != "/":
+        go(paths.dirname(cwd))
+
+fn reload():
+    load()
+    refresh()
+    ui.toast(t("Refreshed"), "refresh")
+
+fn open(f):
+    if f.type == "dir":
+        go(f.path)
+    else:
+        sys.openPath(f.path)
+
+fn pick(p):
+    sel = p
+    refresh()
+
+fn crumbs():
+    let parts = paths.split(cwd)
+    let out = []
+    out.append({"name": "OS", "path": "/"})
+    let acc = ""
+    for p in parts:
+        acc = acc + "/" + p
+        out.append({"name": p, "path": acc})
+    return out
+
+fn toggleView():
+    if view == "grid":
+        view = "list"
+    else:
+        view = "grid"
+    refresh()
+
+fn doSearch():
+    load()
+    refresh()
+
+fn newFolder():
+    ui.prompt(t("New folder"), t("New folder"), makeFolder)
+
+fn makeFolder(name):
+    if name == "":
+        return
+    let p = paths.join(cwd, name)
+    if fs.exists(p):
+        ui.toast(t("Already exists: ") + name, "alert")
+        return
+    fs.mkdir(p)
+    load()
+    refresh()
+
+fn newFile():
+    ui.prompt(t("New file"), "untitled.txt", makeFile)
+
+fn makeFile(name):
+    if name == "":
+        return
+    let p = paths.join(cwd, name)
+    if fs.exists(p):
+        ui.toast(t("Already exists: ") + name, "alert")
+        return
+    fs.write(p, "")
+    load()
+    refresh()
+
+fn deleteSel():
+    if sel == "":
+        ui.toast(t("Nothing selected"), "alert")
+        return
+    ui.confirm(t('Delete "{0}"?\nThis cannot be undone.', paths.basename(sel)), doDelete, t("Delete file"))
+
+fn doDelete():
+    if sel == "" or not fs.exists(sel):
+        return
+    let name = paths.basename(sel)
+    fs.remove(sel)
+    sel = ""
+    load()
+    refresh()
+    ui.toast(t("Deleted ") + name, "trash")
+
+fn renameSel():
+    if sel == "":
+        return
+    ui.prompt(t("Rename"), paths.basename(sel), doRename)
+
+fn doRename(name):
+    if sel == "" or name == "":
+        return
+    let target = paths.join(paths.dirname(sel), name)
+    if fs.exists(target):
+        ui.toast(t("Already exists: ") + name, "alert")
+        return
+    fs.rename(sel, target)
+    sel = target
+    load()
+    refresh()
+
+fn menuFor(f, e):
+    e.stop()
+    sel = f.path
+    ui.menu([
+        {"label": t("Open"), "icon": "external", "id": "open"},
+        {"sep": True},
+        {"label": t("Rename"), "icon": "pen", "id": "rename"},
+        {"label": t("Duplicate"), "icon": "copy", "id": "duplicate"},
+        {"label": t("Delete"), "icon": "trash", "danger": True, "id": "delete"},
+        {"sep": True},
+        {"label": t("Copy path"), "icon": "link", "id": "copy"},
+    ], fileMenuPick, e.x, e.y)
+
+fn fileMenuPick(it):
+    let id = it.get("id")
+    if id == "open":
+        for f in entries:
+            if f.path == sel:
+                open(f)
+    elif id == "rename":
+        renameSel()
+    elif id == "delete":
+        deleteSel()
+    elif id == "duplicate":
+        if sel != "":
+            let target = paths.join(paths.dirname(sel), "copy of " + paths.basename(sel))
+            fs.copy(sel, target)
+            load()
+            refresh()
+    elif id == "copy":
+        clip.write(sel)
+        ui.toast(t("Path copied"), "copy")
+    refresh()
+
+fn statusText():
+    if sel != "":
+        return paths.relative(sel)
+    return paths.relative(cwd)
+
+load()
+setTitle()

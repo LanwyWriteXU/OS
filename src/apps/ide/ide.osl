@@ -1,0 +1,403 @@
+# ide.osl — a small IDE: explorer, tabs, syntax-highlighted editor and a run panel.
+
+let root = "/home/user/Projects"
+let sidebarOpen = True
+let panelOpen = True
+let tree = []
+let collapsed = []
+let tabs = []
+let active = ""
+let text = ""
+let output = ""
+let outputOk = True
+let status = ""
+let cursorLine = 1
+let cursorCol = 1
+let paletteOpen = False
+let paletteQuery = ""
+let paletteHits = []
+let menuTarget = ""
+let savedText = ""
+
+# ---------------------------------------------------------------- explorer
+
+fn reloadTree():
+    tree = []
+    walk(root, 0, tree)
+
+fn walk(path, depth, out):
+    if depth > 4:
+        return
+    for n in fs.list(path):
+        if n.name.startswith("."):
+            continue
+        out.append({
+            "name": n.name,
+            "path": n.path,
+            "type": n.type,
+            "depth": depth,
+            "ext": n.ext,
+        })
+        if n.type == "dir":
+            if not (n.path in collapsed):
+                walk(n.path, depth + 1, out)
+
+fn iconFor(n):
+    if n.get("type") == "dir":
+        if n.get("path") in collapsed:
+            return "chevron-right"
+        return "chevron-down"
+    let ext = n.get("ext")
+    if ext == "osl":
+        return "code"
+    if ext == "oml":
+        return "layers"
+    if ext == "md" or ext == "txt":
+        return "file-text"
+    if ext == "json":
+        return "layers"
+    return "file"
+
+fn files():
+    let out = []
+    for n in tree:
+        if n.get("type") == "file":
+            out.append(n)
+    return out
+
+fn toggleDir(p, e):
+    e.stop()
+    if p in collapsed:
+        collapsed.remove(p)
+    else:
+        collapsed.append(p)
+    reloadTree()
+    refresh()
+
+fn nodeClick(n, e):
+    if n.get("type") == "dir":
+        toggleDir(n.get("path"), e)
+        return
+    openFile(n.get("path"))
+
+# ---------------------------------------------------------------- tabs
+
+fn tabFor(p):
+    for tb in tabs:
+        if tb.get("path") == p:
+            return tb
+    return None
+
+fn activeTab():
+    return tabFor(active)
+
+fn openFile(p):
+    if not fs.exists(p) or fs.isDir(p):
+        return
+    let existing = tabFor(p)
+    if existing == None:
+        tabs.append({
+            "path": p,
+            "name": paths.basename(p),
+            "text": fs.read(p),
+            "dirty": False,
+        })
+    else:
+        active = p
+        text = existing.get("text")
+        savedText = text
+        setTitle()
+        refresh()
+        return
+    active = p
+    text = tabFor(p).get("text")
+    savedText = text
+    setTitle()
+    refresh()
+
+fn switchTab(p):
+    let tb = tabFor(p)
+    if tb == None:
+        return
+    active = p
+    text = tb.get("text")
+    savedText = text
+    setTitle()
+    refresh()
+
+fn closeTab(p):
+    let keep = []
+    for tb in tabs:
+        if tb.get("path") != p:
+            keep.append(tb)
+    tabs = keep
+    if active == p:
+        if len(tabs) > 0:
+            active = tabs[len(tabs) - 1].get("path")
+            text = activeTab().get("text")
+            savedText = text
+        else:
+            active = ""
+            text = ""
+            savedText = ""
+    setTitle()
+    refresh()
+
+fn closeTabEvent(p, e):
+    e.stop()
+    closeTab(p)
+
+fn setTitle():
+    if active == "":
+        win.setTitle(t("IDE"))
+    else:
+        win.setTitle(paths.basename(active) + " — " + t("IDE"))
+
+fn breadcrumb():
+    if active == "":
+        return t("No file open")
+    return paths.relative(active)
+
+# ---------------------------------------------------------------- editing
+
+fn onEdit():
+    let tb = activeTab()
+    if tb == None:
+        return
+    tb.set("text", text)
+    tb.set("dirty", text != savedText)
+
+fn save():
+    let tb = activeTab()
+    if tb == None:
+        return
+    fs.write(tb.get("path"), text)
+    tb.set("text", text)
+    tb.set("dirty", False)
+    savedText = text
+    status = t("Saved")
+    reloadTree()
+    refresh()
+
+fn saveQuiet():
+    let tb = activeTab()
+    if tb == None:
+        return
+    fs.write(tb.get("path"), text)
+    tb.set("text", text)
+    tb.set("dirty", False)
+    savedText = text
+
+# ---------------------------------------------------------------- run
+
+fn runFile():
+    let tb = activeTab()
+    if tb == None:
+        ui.toast(t("No file open"), "alert")
+        return
+    saveQuiet()
+    panelOpen = True
+    let res = sys.runScript(text, tb.get("path"))
+    outputOk = res.get("ok")
+    let parts = []
+    if res.get("output") != "":
+        parts.append(res.get("output"))
+    if res.get("error") != "":
+        parts.append(res.get("error"))
+    if len(parts) == 0:
+        parts.append(t("Finished with no output"))
+    output = parts.join("\n")
+    status = outputOk ? t("Finished") : t("Failed")
+    refresh()
+
+fn clearOutput():
+    output = ""
+    status = ""
+    refresh()
+
+fn togglePanel():
+    panelOpen = not panelOpen
+    refresh()
+
+fn toggleSidebar():
+    sidebarOpen = not sidebarOpen
+    refresh()
+
+# ---------------------------------------------------------------- commands
+
+fn newFile():
+    ui.prompt(t("New file"), "untitled.osl", createFile)
+
+fn createFile(name):
+    if name == "":
+        return
+    let dir = root
+    if menuTarget != "" and fs.isDir(menuTarget):
+        dir = menuTarget
+    let p = paths.join(dir, name)
+    if fs.exists(p):
+        ui.toast(t("Already exists: ") + name, "alert")
+        return
+    fs.write(p, "# " + name + "\n")
+    reloadTree()
+    openFile(p)
+    menuTarget = dir
+    ui.toast(t("Created ") + name, "file-plus")
+
+fn newFolder():
+    ui.prompt(t("New folder"), "new-folder", createFolder)
+
+fn createFolder(name):
+    if name == "":
+        return
+    let p = paths.join(root, name)
+    if fs.exists(p):
+        ui.toast(t("Already exists: ") + name, "alert")
+        return
+    fs.mkdir(p)
+    reloadTree()
+    refresh()
+
+fn nodeMenu(n, e):
+    e.stop()
+    menuTarget = n.get("path")
+    let label = t("Open")
+    if n.get("type") == "dir":
+        label = t("New file")
+    ui.menu([
+        {"label": label, "icon": "external", "id": "open"},
+        {"label": t("New file"), "icon": "file-plus", "id": "newfile"},
+        {"sep": True},
+        {"label": t("Rename"), "icon": "pen", "id": "rename"},
+        {"label": t("Delete"), "icon": "trash", "danger": True, "id": "delete"},
+    ], nodePick, e.x, e.y)
+
+fn nodePick(it):
+    let id = it.get("id")
+    if id == "open":
+        if menuTarget != "" and fs.isDir(menuTarget):
+            newFile()
+        else:
+            openFile(menuTarget)
+    elif id == "newfile":
+        if menuTarget != "" and not fs.isDir(menuTarget):
+            menuTarget = paths.dirname(menuTarget)
+        newFile()
+    elif id == "rename":
+        ui.prompt(t("Rename"), paths.basename(menuTarget), renameNode)
+    elif id == "delete":
+        ui.confirm(t("Delete") + " \"" + paths.basename(menuTarget) + "\"?", deleteNode, t("Delete"))
+    refresh()
+
+fn renameNode(name):
+    if name == "" or menuTarget == "":
+        return
+    let target = paths.join(paths.dirname(menuTarget), name)
+    if fs.exists(target):
+        ui.toast(t("Already exists: ") + name, "alert")
+        return
+    fs.rename(menuTarget, target)
+    for tb in tabs:
+        if tb.get("path") == menuTarget:
+            tb.set("path", target)
+            tb.set("name", name)
+    if active == menuTarget:
+        active = target
+        setTitle()
+    menuTarget = target
+    reloadTree()
+    refresh()
+
+fn deleteNode():
+    if menuTarget == "" or not fs.exists(menuTarget):
+        return
+    let gone = menuTarget
+    fs.remove(gone)
+    let keep = []
+    for tb in tabs:
+        if tb.get("path") != gone:
+            keep.append(tb)
+    tabs = keep
+    if active == gone:
+        active = ""
+        text = ""
+        savedText = ""
+        if len(tabs) > 0:
+            active = tabs[len(tabs) - 1].get("path")
+            text = activeTab().get("text")
+            savedText = text
+    menuTarget = ""
+    reloadTree()
+    setTitle()
+    refresh()
+
+# ---------------------------------------------------------------- palette
+
+fn openPalette():
+    paletteOpen = True
+    paletteQuery = ""
+    paletteSearch()
+    refresh()
+
+fn closePalette():
+    paletteOpen = False
+    refresh()
+
+fn paletteSearch():
+    let q = paletteQuery.lower()
+    let out = []
+    for n in files():
+        if q == "" or n.get("name").lower().find(q) >= 0:
+            out.append(n)
+        if len(out) >= 60:
+            break
+    paletteHits = out
+
+fn pickPalette(p):
+    paletteOpen = False
+    openFile(p)
+
+fn paletteKey(e):
+    if e.key == "Escape":
+        closePalette()
+
+# ---------------------------------------------------------------- keys
+
+fn onKey(e):
+    if e.ctrl and e.key == "s":
+        e.prevent()
+        save()
+    elif e.ctrl and e.key == "p":
+        e.prevent()
+        openPalette()
+    elif e.ctrl and e.key == "b":
+        e.prevent()
+        toggleSidebar()
+    elif e.key == "F5" or (e.ctrl and e.key == "Enter"):
+        e.prevent()
+        runFile()
+    elif e.key == "Escape" and paletteOpen:
+        closePalette()
+
+fn onCaret(e):
+    let pos = e.selStart
+    if pos > len(text):
+        pos = len(text)
+    if pos < 0:
+        pos = 0
+    let before = text[:pos]
+    let rows = before.split("\n")
+    cursorLine = len(rows)
+    cursorCol = len(rows[-1]) + 1
+    refresh()
+
+# ---------------------------------------------------------------- boot
+
+reloadTree()
+if fs.exists(paths.join(root, "app.osl")):
+    openFile(paths.join(root, "app.osl"))
+elif len(files()) > 0:
+    openFile(files()[0].get("path"))
+else:
+    setTitle()
+    refresh()

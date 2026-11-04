@@ -1,0 +1,64 @@
+<Window title="Monitor" icon="app-monitor">
+  <VBox class="mon">
+    <HBox class="mon-cards">
+      <VBox class="ui-card mon-card">
+        <Label class="mon-k" text="Uptime"/>
+        <Label class="mon-v" text="{uptimeText}"/>
+        <Label class="mon-s" text="{user}"/>
+      </VBox>
+      <VBox class="ui-card mon-card">
+        <Label class="mon-k" text="Storage used"/>
+        <Label class="mon-v" text="{percent}%"/>
+        <Label class="mon-s" text="{t('{0} · {1} files', sizeText, fileCount)}"/>
+      </VBox>
+      <VBox class="ui-card mon-card">
+        <Label class="mon-k" text="Open windows"/>
+        <Label class="mon-v" text="{len(windows)}"/>
+        <Label class="mon-s" text="{t('{0} apps installed', appCount)}"/>
+      </VBox>
+      <VBox class="ui-card mon-card">
+        <Label class="mon-k" text="Processor"/>
+        <Label class="mon-v" text="{cores}"/>
+        <Label class="mon-s" text="{memory}"/>
+      </VBox>
+    </HBox>
+
+    <VBox class="ui-card mon-gauge">
+      <HBox class="mon-gauge-head">
+        <Label class="set-name" text="System load" flex="1"/>
+        <Label class="set-desc" text="{loadPercent}%"/>
+      </HBox>
+      <Progress value="{loadPercent}"/>
+      <HBox class="mon-gauge-head">
+        <Label class="set-name" text="Storage used" flex="1"/>
+        <Label class="set-desc" text="{percent}%"/>
+      </HBox>
+      <Progress value="{percent}"/>
+    </VBox>
+
+    <HBox class="mon-list-head">
+      <Label class="set-name" text="Processes" flex="1"/>
+      <Label class="set-desc" text="{version}"/>
+    </HBox>
+
+    <Scroll class="mon-list" flex="1">
+      <For each="windows" as="w" key="w.id">
+        <HBox class="mon-row {w.active ? 'active' : ''}" oncontextmenu="rowMenu(w, event)">
+          <Icon name="{w.icon}" size="18"/>
+          <VBox class="mon-row-name" flex="1">
+            <Label text="{w.title}"/>
+            <Label class="mon-sub" text="{w.appId}"/>
+          </VBox>
+          <Label class="ui-badge" text="{t('running')}" if="{!w.minimized}"/>
+          <Label class="ui-badge muted" text="{t('minimized')}" if="{w.minimized}"/>
+          <Button text="Focus" onclick="focusWin(w.id)"/>
+          <IconButton icon="x" title="End process" onclick="endWin(w.id)"/>
+        </HBox>
+      </For>
+      <VBox class="empty" if="{len(windows) == 0}">
+        <Icon name="monitor" size="40"/>
+        <Label text="No windows open"/>
+      </VBox>
+    </Scroll>
+  </VBox>
+</Window>

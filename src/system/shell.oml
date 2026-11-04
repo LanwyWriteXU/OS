@@ -1,0 +1,147 @@
+<Window title="OS Shell" icon="app-about">
+  <VBox class="shell wall-{wallpaper}" oncontextmenu="desktopMenu(event)">
+
+    <!-- macOS menu bar -->
+    <HBox class="menubar" if="{style == 'mac'}">
+      <Button class="mb-item logo" onclick="toggleMenu('apple', event)"><Icon name="app-about" size="16"/></Button>
+      <Button class="mb-item" onclick="toggleMenu('app', event)" text="{activeApp}"/>
+      <Button class="mb-item" onclick="toggleMenu('file', event)" text="File"/>
+      <Button class="mb-item" onclick="toggleMenu('view', event)" text="View"/>
+      <Button class="mb-item" onclick="toggleMenu('help', event)" text="Help"/>
+      <Spacer/>
+      <Label class="mb-item" text="{batteryText}"/>
+      <Icon class="mb-item" name="wifi" size="15"/>
+      <Label class="mb-item" text="{clock}"/>
+    </HBox>
+
+    <VBox class="workarea" onclick="closeMenus()">
+      <VBox class="desk-icons">
+        <For each="deskIcons" as="it" key="it.path">
+          <Button class="desk-icon {deskSel == it.path ? 'sel' : ''}" onclick="selectDesktop(it.path)" ondblclick="openItem(it)" oncontextmenu="deskIconMenu(it, event)">
+            <Icon name="{it.icon}" size="42"/>
+            <Label text="{it.name}"/>
+          </Button>
+        </For>
+      </VBox>
+
+      <VBox id="window-layer" class="window-layer"></VBox>
+
+      <VBox class="notif-layer">
+        <For each="notifs" as="n" key="n.id">
+          <HBox class="notif" onclick="dismissNotif(n.id)">
+            <Icon name="{n.icon}" size="20"/>
+            <VBox flex="1">
+              <Label class="n-title" text="{n.title}"/>
+              <Label class="n-body" text="{n.body}"/>
+            </VBox>
+          </HBox>
+        </For>
+      </VBox>
+    </VBox>
+
+    <!-- start menu: applications on the left, places and recent files on the right -->
+    <VBox class="start-menu two-col {style == 'mac' ? 'mac' : ''}" if="{startOpen}">
+      <HBox class="sm-cols">
+        <VBox class="sm-left">
+          <HBox class="sm-head">
+            <Label class="sm-h" text="All apps"/>
+            <Label class="sm-count" text="{len(filteredApps())}"/>
+          </HBox>
+          <Scroll class="sm-apps" flex="1">
+            <For each="filteredApps()" as="a" key="a.id">
+              <Button class="sm-app" onclick="launch(a.id)">
+                <Icon name="{a.icon}" size="22"/>
+                <Label class="sm-app-name" text="{a.name}"/>
+              </Button>
+            </For>
+            <VBox class="sm-hits" if="{hits.length > 0}">
+              <Label class="sm-h" text="Files"/>
+              <For each="hits" as="r" key="r.path">
+                <Button class="sm-app" onclick="openRecent(r.path)">
+                  <Icon name="file-text" size="18"/>
+                  <Label class="sm-app-name" text="{r.name}"/>
+                </Button>
+              </For>
+            </VBox>
+          </Scroll>
+          <HBox class="sm-search">
+            <Icon name="search" size="14"/>
+            <Input bind="search" placeholder="Search apps and files" oninput="doSearch()"/>
+          </HBox>
+        </VBox>
+
+        <VBox class="sm-right">
+          <Label class="sm-h" text="Places"/>
+          <VBox class="sm-links">
+            <For each="places" as="p" key="p.path">
+              <Button class="sm-link" onclick="goPlace(p.path)">
+                <Icon name="{p.icon}" size="16"/>
+                <Label text="{p.name}" flex="1"/>
+              </Button>
+            </For>
+          </VBox>
+          <Divider/>
+          <Label class="sm-h" text="Recent"/>
+          <VBox class="sm-recent">
+            <For each="filteredRecent()" as="r" key="r.path">
+              <Button class="sm-recent-item" onclick="openRecent(r.path)">
+                <Icon name="file-text" size="15"/>
+                <Label class="r-name" text="{r.name}"/>
+              </Button>
+            </For>
+          </VBox>
+          <Spacer/>
+          <HBox class="sm-foot">
+            <HBox class="start-user"><Div class="avatar" text="{avatar}"/><Label text="{user}"/></HBox>
+            <HBox class="start-power">
+              <IconButton icon="lock" title="Lock" onclick="lockScreen()"/>
+              <IconButton icon="power" title="Power" onclick="powerMenu()"/>
+            </HBox>
+          </HBox>
+        </VBox>
+      </HBox>
+    </VBox>
+
+    <!-- macOS menus -->
+    <VBox class="mb-menu" if="{activeMenu != ''}" style="left:{menuX}px">
+      <For each="menuItems()" as="mi" key="mi.label">
+        <Div class="sep" if="{mi.sep}"/>
+        <Button text="{mi.label}" if="{!mi.sep}" onclick="menuPick(mi)"/>
+      </For>
+    </VBox>
+
+    <!-- Windows taskbar -->
+    <HBox class="taskbar" if="{style == 'win'}">
+      <HBox class="tb-center">
+        <Button class="tb-start" onclick="toggleStart()" title="Start">
+          <Icon name="app-about" size="26"/>
+        </Button>
+        <For each="running" as="w" key="w.id">
+          <Button class="tb-btn {w.active ? 'active' : ''} {w.minimized ? 'minimized' : ''}" onclick="taskClick(w.id)" title="{w.title}">
+            <Icon name="{w.icon}" size="24"/>
+          </Button>
+        </For>
+      </HBox>
+      <HBox class="tray">
+        <Button class="tray-btn" onclick="trayMenu(event)"><Icon name="wifi" size="16"/><Icon name="volume" size="16"/><Icon name="battery" size="16"/></Button>
+        <VBox class="tray-clock" onclick="openCalendar()"><Label text="{clock}"/><Label text="{dateStr}"/></VBox>
+        <Div class="tray-showdesk" onclick="showDesktop()" title="Show desktop"/>
+      </HBox>
+    </HBox>
+
+    <!-- macOS dock -->
+    <HBox class="dock-wrap" if="{style == 'mac'}">
+      <HBox class="dock">
+        <For each="apps" as="a" key="a.id">
+          <Button class="dock-app" onclick="launch(a.id)" title="{a.name}">
+            <Icon name="{a.icon}" size="44"/>
+            <Div class="dot" if="{isRunning(a.id)}"/>
+          </Button>
+        </For>
+        <Div class="dock-sep"/>
+        <Button class="dock-app" onclick="showDesktop()" title="Show desktop"><Icon name="grid" size="38"/></Button>
+      </HBox>
+    </HBox>
+
+  </VBox>
+</Window>

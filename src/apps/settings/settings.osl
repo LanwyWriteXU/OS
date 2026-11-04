@@ -1,0 +1,101 @@
+# settings.osl — reads and writes the system settings store.
+
+let tab = args.get("tab")
+if tab == None:
+    tab = "appearance"
+let s = sys.settings()
+let theme = s.get("theme")
+let style = s.get("style")
+let wallpaper = s.get("wallpaper")
+let accent = s.get("accent")
+let animations = s.get("animations")
+let clock24 = s.get("clock24")
+let user = s.get("user")
+let uiLang = s.get("lang")
+let wallpapers = ["aurora", "void", "dune", "mint", "sunset", "graphite", "nebula", "forest"]
+let accents = ["#5aa9ff", "#8b7cff", "#34d399", "#fbbf24", "#fb7185", "#22d3ee"]
+let langs = [
+    {"id": "en", "name": "English"},
+    {"id": "zh", "name": "简体中文"},
+]
+let sizeText = "0 B"
+let fileCount = 0
+let percent = 0
+let sysline = ""
+
+fn onRefresh():
+    let size = fs.size("/")
+    sizeText = fs.sizeText(size)
+    fileCount = fs.count("/")
+    percent = math.round(size / 8388608 * 100)
+    sysline = "OS 1.0 Origin · OSL 1.0 · OML 1.0 · " + str(navigatorCores()) + " cores"
+
+fn navigatorCores():
+    return 8
+
+fn go(name):
+    tab = name
+    refresh()
+
+fn setLang(v):
+    uiLang = v
+    sys.setSetting("lang", v)
+    refresh()
+
+fn setWall(w):
+    wallpaper = w
+    sys.setSetting("wallpaper", w)
+    refresh()
+
+fn setAccent(c):
+    accent = c
+    sys.setSetting("accent", c)
+    refresh()
+
+fn setTheme(v):
+    theme = v
+    sys.setSetting("theme", v)
+    refresh()
+
+fn setStyle(v):
+    style = v
+    sys.setSetting("style", v)
+    refresh()
+
+fn applyAnimations():
+    sys.setSetting("animations", animations)
+    refresh()
+
+fn applyClock():
+    sys.setSetting("clock24", clock24)
+    refresh()
+
+fn openAbout():
+    sys.open("about")
+
+fn renameUser():
+    ui.prompt(t("User name"), user, doRenameUser)
+
+fn doRenameUser(name):
+    if name == "":
+        return
+    user = name
+    sys.setSetting("user", name)
+    refresh()
+
+fn runFetch():
+    sys.open("terminal", {"cwd": "/home/user"})
+
+fn openGuide():
+    sys.openPath("/home/user/Documents/welcome.md")
+
+fn openSample():
+    sys.open("editor", {"path": "/home/user/Projects/hello.osl"})
+
+fn confirmReset():
+    ui.confirm(t("Reset the whole file system to its original state?\nAll of your files will be deleted."), doReset, t("Factory reset"))
+
+fn doReset():
+    sys.factoryReset()
+
+onRefresh()

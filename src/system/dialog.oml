@@ -1,0 +1,8 @@
+<Modal title="{title}" icon="{icon}">
+  <Label class="modal-msg" text="{message}"/>
+  <Input if="{isPrompt}" bind="value" placeholder="{placeholder}" onkeydown="onKey(event)"/>
+  <HBox class="modal-actions">
+    <Button text="{cancelText}" onclick="cancel()" if="{isConfirm}"/>
+    <Button text="{okText}" variant="primary" onclick="ok()"/>
+  </HBox>
+</Modal>

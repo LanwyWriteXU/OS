@@ -1,0 +1,39 @@
+<Window title="Notes" icon="app-notes">
+  <HBox class="notes">
+    <VBox class="notes-side">
+      <HBox class="notes-side-head">
+        <Label class="side-title" text="Notes"/>
+        <Spacer/>
+        <IconButton icon="file-plus" title="New note" onclick="newNote()"/>
+      </HBox>
+      <Scroll class="notes-list" flex="1">
+        <For each="files" as="f" key="f.path">
+          <Button class="notes-item {sel == f.path ? 'sel' : ''}" onclick="openNote(f.path)" oncontextmenu="noteMenu(f, event)">
+            <Icon name="file-text" size="15"/>
+            <Label class="notes-item-name" text="{f.name}" flex="1"/>
+          </Button>
+        </For>
+        <VBox class="empty" if="{len(files) == 0}">
+          <Icon name="file-text" size="34"/>
+          <Label text="No notes yet"/>
+          <Button icon="file-plus" text="New note" variant="primary" onclick="newNote()"/>
+        </VBox>
+      </Scroll>
+      <Label class="notes-count" text="{t('{0} notes', len(files))}"/>
+    </VBox>
+
+    <VBox class="notes-main" flex="1">
+      <HBox class="notes-bar">
+        <Button icon="file-plus" text="New" onclick="newNote()"/>
+        <Button icon="save" text="Save" variant="primary" onclick="save()"/>
+        <Spacer/>
+        <IconButton icon="trash" title="Delete note" onclick="deleteNote()"/>
+      </HBox>
+      <TextArea class="notes-area" bind="text" flex="1" oninput="onEdit()" spellcheck="false" placeholder="Write something…"/>
+      <HBox class="notes-status">
+        <Label text="{statusText}" flex="1"/>
+        <Label text="{t('{0} words · {1} chars', words, chars)}"/>
+      </HBox>
+    </VBox>
+  </HBox>
+</Window>

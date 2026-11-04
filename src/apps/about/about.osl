@@ -1,0 +1,35 @@
+# about.osl — system information, formatted for humans.
+
+let uptimeText = ""
+let cores = 8
+let resolution = ""
+let memory = ""
+let fileCount = 0
+let sizeText = ""
+
+fn onRefresh():
+    let ms = sys.uptime()
+    let mins = math.floor(ms / 60000)
+    let h = math.floor(mins / 60)
+    let m = mins - h * 60
+    if h > 0:
+        uptimeText = str(h) + " h " + str(m) + " min"
+    else:
+        uptimeText = str(m) + " min"
+    let info = sys.info()
+    cores = info.get("cores")
+    resolution = info.get("resolution")
+    memory = info.get("memory")
+    fileCount = fs.count("/")
+    sizeText = fs.sizeText(fs.size("/"))
+
+fn openGuide():
+    sys.openPath("/home/user/Documents/welcome.md")
+
+fn openTerm():
+    sys.open("terminal")
+
+fn checkUpdates():
+    ui.toast("OS 1.0 is up to date.", "check")
+
+onRefresh()

@@ -1,0 +1,31 @@
+<Window title="Calendar" icon="app-calendar">
+  <VBox class="cal">
+    <HBox class="cal-head">
+      <IconButton icon="chevron-left" title="Previous month" onclick="prevMonth()"/>
+      <Label class="cal-title" text="{header}" flex="1"/>
+      <Button text="Today" onclick="goToday()"/>
+      <IconButton icon="chevron-right" title="Next month" onclick="nextMonth()"/>
+    </HBox>
+
+    <Grid class="cal-week" cols="7">
+      <For each="weekdays" as="w" key="w">
+        <Label class="cal-wd" text="{w}"/>
+      </For>
+    </Grid>
+
+    <Grid class="cal-grid" cols="7" flex="1">
+      <For each="cells" as="c" key="c.key">
+        <Button class="cal-cell {c.today ? 'today' : ''}" onclick="pickDay(c)" if="{c.day != ''}">
+          <Label text="{c.label}"/>
+        </Button>
+        <Div class="cal-blank" if="{c.day == ''}"/>
+      </For>
+    </Grid>
+
+    <HBox class="cal-foot">
+      <Icon name="calendar" size="14"/>
+      <Label text="{selText}" flex="1"/>
+      <Label class="cal-count" text="{t('{0} days', dayCount)}"/>
+    </HBox>
+  </VBox>
+</Window>

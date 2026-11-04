@@ -1,0 +1,78 @@
+<Window title="Files" icon="app-files">
+  <HBox class="files">
+    <VBox class="files-side">
+      <Label class="side-title" text="Quick access"/>
+      <Button class="side-item" icon="home" text="Home" onclick="go('/home/user')"/>
+      <Button class="side-item" icon="monitor" text="Desktop" onclick="go('/home/user/Desktop')"/>
+      <Button class="side-item" icon="file-text" text="Documents" onclick="go('/home/user/Documents')"/>
+      <Button class="side-item" icon="download" text="Downloads" onclick="go('/home/user/Downloads')"/>
+      <Button class="side-item" icon="image" text="Pictures" onclick="go('/home/user/Pictures')"/>
+      <Button class="side-item" icon="code" text="Projects" onclick="go('/home/user/Projects')"/>
+      <Spacer/>
+      <Button class="side-item" icon="hard-drive" text="System" onclick="go('/etc')"/>
+      <Label class="side-meta" text="{t('{0} items in this folder', len(entries))}"/>
+    </VBox>
+
+    <VBox class="files-main" flex="1">
+      <HBox class="files-toolbar">
+        <IconButton icon="arrow-left" title="Back" onclick="back()"/>
+        <IconButton icon="arrow-right" title="Forward" onclick="fwd()"/>
+        <IconButton icon="arrow-up" title="Up" onclick="up()"/>
+        <IconButton icon="refresh" title="Refresh" onclick="reload()"/>
+        <HBox class="crumbs" flex="1">
+          <For each="crumbs()" as="c">
+            <Button class="crumb {c.path == cwd ? 'last' : ''}" text="{c.name}" onclick="go(c.path)"/>
+            <Label class="muted" text="/" if="{c.path != cwd}"/>
+          </For>
+        </HBox>
+        <Input class="files-search" bind="query" placeholder="Search…" oninput="doSearch()"/>
+        <IconButton icon="{view == 'grid' ? 'list' : 'grid'}" title="Toggle view" onclick="toggleView()"/>
+      </HBox>
+
+      <HBox class="files-actions">
+        <Button icon="folder-plus" text="New folder" onclick="newFolder()"/>
+        <Button icon="file-plus" text="New file" onclick="newFile()"/>
+        <Spacer/>
+        <Label class="hint" text="Double-click to open · Right-click for actions"/>
+      </HBox>
+
+      <Scroll class="files-body" flex="1">
+        <Grid class="tiles" if="{view == 'grid'}" cols="repeat(auto-fill, minmax(108px, 1fr))">
+          <For each="entries" as="f">
+            <Button class="tile {sel == f.path ? 'sel' : ''}" onclick="pick(f.path)" ondblclick="open(f)" oncontextmenu="menuFor(f, event)">
+              <Icon name="{iconFor(f)}" size="34"/>
+              <Label class="tile-name" text="{f.name}"/>
+            </Button>
+          </For>
+        </Grid>
+
+        <VBox if="{view == 'list'}">
+          <HBox class="row" style="border-bottom:1px solid var(--border);border-radius:0">
+            <Label class="cell" text="Name" style="width:auto;flex:1;text-align:left"/>
+            <Label class="cell" text="Size"/>
+            <Label class="cell" text="Modified"/>
+          </HBox>
+          <For each="entries" as="f">
+            <HBox class="row {sel == f.path ? 'sel' : ''}" onclick="pick(f.path)" ondblclick="open(f)" oncontextmenu="menuFor(f, event)">
+              <Icon name="{iconFor(f)}" size="17"/>
+              <Label text="{f.name}" flex="1"/>
+              <Label class="cell" text="{sizeText(f)}"/>
+              <Label class="cell" text="{dateText(f)}"/>
+            </HBox>
+          </For>
+        </VBox>
+
+        <VBox class="empty" if="{len(entries) == 0}">
+          <Icon name="folder" size="48"/>
+          <Label text="This folder is empty"/>
+          <Button icon="folder-plus" text="New folder" variant="primary" onclick="newFolder()"/>
+        </VBox>
+      </Scroll>
+
+      <HBox class="files-status">
+        <Label text="{statusText()}" flex="1"/>
+        <Label text="{t('{0} items', len(entries))}"/>
+      </HBox>
+    </VBox>
+  </HBox>
+</Window>

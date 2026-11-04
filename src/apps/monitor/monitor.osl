@@ -1,0 +1,69 @@
+# monitor.osl — live view of the window list and file-system usage.
+
+let windows = []
+let sizeText = "0 B"
+let fileCount = 0
+let percent = 0
+let uptimeText = ""
+let cores = 0
+let memory = ""
+let version = ""
+let user = ""
+let appCount = 0
+let loadPercent = 0
+let menuWindow = 0
+
+fn onRefresh():
+    windows = sys.windows()
+    fileCount = fs.count("/")
+    let size = fs.size("/")
+    sizeText = fs.sizeText(size)
+    percent = math.min(100, math.round(size / 8388608 * 100))
+    uptimeText = fmtUptime(sys.uptime())
+    let info = sys.info()
+    cores = info.get("cores")
+    memory = info.get("memory")
+    version = sys.version()
+    user = sys.settings().get("user")
+    appCount = len(sys.apps())
+    loadPercent = math.min(100, len(windows) * 14)
+
+fn fmtUptime(ms):
+    let mins = math.floor(ms / 60000)
+    let h = math.floor(mins / 60)
+    let m = mins - h * 60
+    if h > 0:
+        return str(h) + "h " + str(m) + "m"
+    return str(m) + "m"
+
+fn tick():
+    refresh()
+
+every(1200, tick)
+
+fn focusWin(id):
+    sys.focusWindow(id)
+    refresh()
+
+fn endWin(id):
+    sys.closeWindow(id)
+    refresh()
+
+fn rowMenu(w, e):
+    e.stop()
+    menuWindow = w.id
+    ui.menu([
+        {"label": t("Focus"), "icon": "external", "id": "focus"},
+        {"sep": True},
+        {"label": t("End"), "icon": "x", "danger": True, "id": "end"},
+    ], rowPick, e.x, e.y)
+
+fn rowPick(it):
+    let id = it.get("id")
+    if id == "focus":
+        focusWin(menuWindow)
+    elif id == "end":
+        endWin(menuWindow)
+    refresh()
+
+onRefresh()

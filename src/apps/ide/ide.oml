@@ -1,0 +1,105 @@
+<Window title="IDE" icon="app-ide">
+  <HBox class="ide" onkeydown="onKey(event)">
+
+    <!-- explorer -->
+    <VBox class="ide-side" if="{sidebarOpen}">
+      <HBox class="ide-side-head">
+        <Label class="side-title" text="Explorer"/>
+        <Spacer/>
+        <IconButton icon="file-plus" title="New file" onclick="newFile()"/>
+        <IconButton icon="folder-plus" title="New folder" onclick="newFolder()"/>
+        <IconButton icon="refresh" title="Refresh" onclick="reloadTree(); refresh()"/>
+      </HBox>
+      <Scroll class="ide-tree" flex="1">
+        <For each="tree" as="n" key="n.path">
+          <HBox class="ide-node {active == n.path ? 'sel' : ''}" style="padding-left:{10 + n.depth * 14}px" onclick="nodeClick(n, event)" oncontextmenu="nodeMenu(n, event)">
+            <Icon name="{iconFor(n)}" size="14"/>
+            <Label class="ide-node-name" text="{n.name}" flex="1"/>
+          </HBox>
+        </For>
+        <VBox class="empty" if="{len(tree) == 0}">
+          <Icon name="folder" size="34"/>
+          <Label text="This folder is empty"/>
+        </VBox>
+      </Scroll>
+      <Label class="ide-side-foot" text="{t('{0} items', len(tree))}"/>
+    </VBox>
+
+    <!-- editor column -->
+    <VBox class="ide-main" flex="1">
+      <HBox class="ide-tabs">
+        <Scroll class="ide-tabbar" flex="1">
+          <HBox class="ide-tabbar-inner">
+            <For each="tabs" as="tb" key="tb.path">
+              <HBox class="ide-tab {active == tb.path ? 'on' : ''}" onclick="switchTab(tb.path)">
+                <Icon name="code" size="13"/>
+                <Label class="ide-tab-name" text="{tb.name}"/>
+                <Div class="ide-dirty" if="{tb.dirty}"/>
+                <Icon name="x" size="12" class="ide-tab-x" onclick="closeTabEvent(tb.path, event)"/>
+              </HBox>
+            </For>
+          </HBox>
+        </Scroll>
+        <IconButton icon="play" title="Run (F5)" onclick="runFile()"/>
+        <IconButton icon="save" title="Save (Ctrl+S)" onclick="save()"/>
+      </HBox>
+
+      <HBox class="ide-crumbs">
+        <Icon name="file-text" size="12"/>
+        <Label class="ide-crumb" text="{breadcrumb()}" flex="1"/>
+        <Label class="ide-hint" text="{t('Ctrl+S save · F5 run · Ctrl+P open')}"/>
+      </HBox>
+
+      <Div class="ide-editor-wrap" flex="1">
+        <CodeEditor class="ide-editor" bind="text" lang="osl" oninput="onEdit()" onkeyup="onCaret(event)" onclick="onCaret(event)"/>
+        <VBox class="ide-empty" if="{active == ''}">
+          <Icon name="code" size="46"/>
+          <Label text="No file open"/>
+          <Button icon="search" text="Go to file" onclick="openPalette()"/>
+        </VBox>
+      </Div>
+
+      <!-- run panel -->
+      <VBox class="ide-panel" if="{panelOpen}">
+        <HBox class="ide-panel-head">
+          <Label class="ide-panel-title" text="Output"/>
+          <Label class="ui-badge {outputOk ? '' : 'danger'}" text="{status}" if="{status != ''}"/>
+          <Spacer/>
+          <IconButton icon="trash" title="Clear" onclick="clearOutput()"/>
+          <IconButton icon="x" title="Close panel" onclick="togglePanel()"/>
+        </HBox>
+        <Scroll class="ide-output" flex="1">
+          <Label class="ide-output-text" text="{output}"/>
+        </Scroll>
+      </VBox>
+
+      <!-- status bar -->
+      <HBox class="ide-status">
+        <Icon name="code" size="12"/>
+        <Label text="{breadcrumb()}" flex="1"/>
+        <Label text="Ln {cursorLine}, Col {cursorCol}"/>
+        <Label text="OSL"/>
+        <Label text="UTF-8"/>
+      </HBox>
+    </VBox>
+
+    <!-- quick open -->
+    <VBox class="ide-palette" if="{paletteOpen}">
+      <HBox class="ide-palette-box">
+        <Icon name="search" size="15"/>
+        <Input bind="paletteQuery" placeholder="Search files by name" oninput="paletteSearch()" onkeydown="paletteKey(event)"/>
+        <IconButton icon="x" title="Close" onclick="closePalette()"/>
+      </HBox>
+      <VBox class="ide-palette-list">
+        <For each="paletteHits" as="h" key="h.path">
+          <Button class="ide-palette-item" onclick="pickPalette(h.path)">
+            <Icon name="file-text" size="14"/>
+            <Label text="{h.path}" flex="1"/>
+          </Button>
+        </For>
+        <Label class="ide-palette-empty" text="No matching files" if="{len(paletteHits) == 0}"/>
+      </VBox>
+    </VBox>
+
+  </HBox>
+</Window>

@@ -1,0 +1,5 @@
+<Window title="Terminal" icon="app-terminal">
+  <VBox class="term-wrap">
+    <TerminalView/>
+  </VBox>
+</Window>

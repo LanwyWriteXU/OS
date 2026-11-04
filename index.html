@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OS — Origin System</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%235aa9ff'/%3E%3Cstop offset='1' stop-color='%238b7cff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='%230d1220'/%3E%3Ccircle cx='32' cy='32' r='15' fill='none' stroke='url(%23g)' stroke-width='6'/%3E%3Ccircle cx='45' cy='19' r='4' fill='%238b7cff'/%3E%3C/svg%3E" />
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; background: #070a11; overflow: hidden; }
+      #boot {
+        position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 26px;
+        background: radial-gradient(1200px 700px at 50% 40%, #131c30 0%, #080b12 60%, #05070c 100%);
+        font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif; color: #dfe8ff;
+        transition: opacity .55s ease, visibility .55s;
+      }
+      #boot.done { opacity: 0; visibility: hidden; }
+      #boot .logo { width: 108px; height: 108px; filter: drop-shadow(0 12px 40px rgba(90,169,255,.35)); animation: pulse 2.6s ease-in-out infinite; }
+      #boot .name { font-size: 30px; font-weight: 300; letter-spacing: .42em; padding-left: .42em; }
+      #boot .sub { font-size: 11px; letter-spacing: .28em; color: #7f8db0; margin-top: -14px; }
+      #boot .bar { width: 190px; height: 3px; border-radius: 3px; background: rgba(255,255,255,.1); overflow: hidden; margin-top: 8px; }
+      #boot .bar i { display: block; height: 100%; width: 30%; border-radius: 3px; background: linear-gradient(90deg, #5aa9ff, #8b7cff); animation: slide 1.25s ease-in-out infinite; }
+      @keyframes slide { 0% { transform: translateX(-110%);} 100% { transform: translateX(420%);} }
+      @keyframes pulse { 0%,100% { transform: scale(1); opacity: .95;} 50% { transform: scale(1.04); opacity: 1;} }
+    </style>
+  </head>
+  <body>
+    <div id="boot">
+      <svg class="logo" viewBox="0 0 64 64" fill="none">
+        <defs>
+          <linearGradient id="bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#5aa9ff" /><stop offset="1" stop-color="#8b7cff" />
+          </linearGradient>
+        </defs>
+        <circle cx="31" cy="33" r="16" stroke="url(#bg)" stroke-width="7" />
+        <circle cx="46" cy="18" r="5" fill="url(#bg)" />
+      </svg>
+      <div class="name">OS</div>
+      <div class="sub">ORIGIN SYSTEM</div>
+      <div class="bar"><i></i></div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,157 @@
+# editor.osl — a small text editor with save / open / dirty tracking.
+
+let path = args.get("path")
+if path == None:
+    path = ""
+let text = ""
+let dirty = False
+let words = 0
+let lines = 0
+let chars = 0
+let pickerOpen = False
+let pickerPath = "/home/user"
+
+fn updateTitle():
+    if path == "":
+        win.setTitle("Untitled — Editor")
+    else:
+        win.setTitle(paths.basename(path) + " — Editor")
+
+fn recount():
+    chars = len(text)
+    if text == "":
+        lines = 1
+        words = 0
+        return
+    lines = len(text.split("\n"))
+    words = 0
+    for w in text.replace("\n", " ").split(" "):
+        if w.strip() != "":
+            words += 1
+
+fn load():
+    if path != "" and fs.exists(path) and not fs.isDir(path):
+        text = fs.read(path)
+        sys.touchRecent(path)
+    else:
+        path = ""
+        text = ""
+    dirty = False
+    recount()
+    updateTitle()
+
+fn onEdit():
+    dirty = True
+    recount()
+    refresh()
+
+fn onKey(e):
+    if e.key == "s" and (e.ctrl or e.meta):
+        e.prevent()
+        save()
+
+fn save():
+    if path == "":
+        saveAs()
+        return
+    fs.write(path, text)
+    dirty = False
+    updateTitle()
+    sys.touchRecent(path)
+    ui.toast("Saved " + paths.basename(path), "save")
+    refresh()
+
+fn saveAs():
+    let def = path
+    if def == "":
+        def = "/home/user/Documents/untitled.txt"
+    ui.prompt("Save as", def, doSaveAs)
+
+fn doSaveAs(p):
+    if p == "":
+        return
+    let target = fs.normalize(p)
+    path = target
+    fs.write(target, text)
+    dirty = False
+    updateTitle()
+    sys.touchRecent(target)
+    ui.toast("Saved " + paths.basename(target), "save")
+    refresh()
+
+fn askOpen():
+    openPicker()
+
+fn doOpen(p):
+    if p == "":
+        return
+    let target = fs.normalize(p)
+    if not fs.exists(target) or fs.isDir(target):
+        ui.toast("No such file: " + p, "alert")
+        return
+    path = target
+    load()
+    refresh()
+
+# ------------------------------------------------------- file picker
+
+fn openPicker():
+    if path != "":
+        pickerPath = paths.dirname(path)
+    else:
+        pickerPath = "/home/user"
+    pickerOpen = True
+    refresh()
+
+fn closePicker():
+    pickerOpen = False
+    refresh()
+
+fn pickerTitle():
+    return pickerPath
+
+fn pickerItems():
+    let dirs = []
+    let files = []
+    if pickerPath != "/":
+        dirs.append({"name": "..", "path": paths.dirname(pickerPath), "type": "dir", "size": 0})
+    for n in fs.list(pickerPath):
+        if n.type == "dir":
+            dirs.append(n)
+        else:
+            files.append(n)
+    for f in files:
+        dirs.append(f)
+    return dirs
+
+fn pickEntry(f):
+    if f.type == "dir":
+        pickerPath = f.path
+        refresh()
+        return
+    if dirty:
+        ui.confirm("Discard unsaved changes?", () => openFrom(f.path), "Open file")
+        return
+    openFrom(f.path)
+
+fn openFrom(p):
+    pickerOpen = False
+    path = p
+    load()
+    refresh()
+
+fn reallyNew():
+    path = ""
+    text = ""
+    dirty = False
+    recount()
+    updateTitle()
+    refresh()
+
+fn newFile():
+    if dirty:
+        ui.confirm("Discard unsaved changes?", reallyNew, "New file")
+    else:
+        reallyNew()
+
+load()

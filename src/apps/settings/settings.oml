@@ -1,0 +1,143 @@
+<Window title="Settings" icon="app-settings">
+  <HBox class="settings">
+    <VBox class="set-nav">
+      <Label class="side-title" text="Settings"/>
+      <Button class="side-item {tab == 'appearance' ? 'active' : ''}" icon="palette" text="Appearance" onclick="go('appearance')"/>
+      <Button class="side-item {tab == 'system' ? 'active' : ''}" icon="monitor" text="System" onclick="go('system')"/>
+      <Button class="side-item {tab == 'storage' ? 'active' : ''}" icon="hard-drive" text="Storage" onclick="go('storage')"/>
+      <Spacer/>
+      <Button class="side-item" icon="info" text="About OS" onclick="openAbout()"/>
+    </VBox>
+
+    <Scroll class="set-body" flex="1">
+      <VBox if="{tab == 'appearance'}" gap="16">
+        <Label class="set-h" text="Appearance"/>
+        <VBox class="ui-card set-card">
+          <Label class="set-name" text="Wallpaper"/>
+          <Grid class="wall-grid" cols="3">
+            <For each="wallpapers" as="w">
+              <Button class="wall-swatch wall-{w} {wallpaper == w ? 'on' : ''}" onclick="setWall(w)"/>
+            </For>
+          </Grid>
+        </VBox>
+
+        <VBox class="ui-card set-card">
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Interface language"/>
+              <Label class="set-desc" text="Choose the language used by the desktop and built-in apps."/>
+            </VBox>
+            <HBox class="seg">
+              <For each="langs" as="l" key="l.id">
+                <Button text="{l.name}" variant="ghost" class="{uiLang == l.id ? 'on' : ''}" onclick="setLang(l.id)"/>
+              </For>
+            </HBox>
+          </HBox>
+          <Divider/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Theme"/>
+              <Label class="set-desc" text="Light or dark surfaces across the whole system."/>
+            </VBox>
+            <HBox class="seg">
+              <Button text="Dark" variant="ghost" class="{theme == 'dark' ? 'on' : ''}" onclick="setTheme('dark')"/>
+              <Button text="Light" variant="ghost" class="{theme == 'light' ? 'on' : ''}" onclick="setTheme('light')"/>
+            </HBox>
+          </HBox>
+          <Divider/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Accent colour"/>
+              <Label class="set-desc" text="Used for highlights, buttons and focus rings."/>
+            </VBox>
+            <HBox class="accent-row">
+              <For each="accents" as="c">
+                <Button class="accent-dot {accent == c ? 'on' : ''}" style="background:{c}" onclick="setAccent(c)"/>
+              </For>
+            </HBox>
+          </HBox>
+          <Divider/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="System style"/>
+              <Label class="set-desc" text="Windows-style taskbar or a macOS menu bar and dock."/>
+            </VBox>
+            <HBox class="seg">
+              <Button text="Windows" variant="ghost" class="{style == 'win' ? 'on' : ''}" onclick="setStyle('win')"/>
+              <Button text="macOS" variant="ghost" class="{style == 'mac' ? 'on' : ''}" onclick="setStyle('mac')"/>
+            </HBox>
+          </HBox>
+        </VBox>
+
+        <VBox class="ui-card set-card">
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Window animations"/>
+              <Label class="set-desc" text="Fade and scale effects when windows open."/>
+            </VBox>
+            <Switch bind="animations" onchange="applyAnimations()"/>
+          </HBox>
+          <Divider/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="24-hour clock"/>
+              <Label class="set-desc" text="Show the taskbar clock in 24-hour format."/>
+            </VBox>
+            <Switch bind="clock24" onchange="applyClock()"/>
+          </HBox>
+        </VBox>
+      </VBox>
+
+      <VBox if="{tab == 'system'}" gap="16">
+        <Label class="set-h" text="System"/>
+        <VBox class="ui-card set-card">
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="User"/>
+              <Label class="set-desc" text="{user}"/>
+            </VBox>
+            <Button icon="pen" text="Rename" onclick="renameUser()"/>
+          </HBox>
+          <Divider/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="System information"/>
+              <Label class="set-desc" text="{sysline}"/>
+            </VBox>
+            <Button icon="terminal" text="fastfetch" onclick="runFetch()"/>
+          </HBox>
+        </VBox>
+        <VBox class="ui-card set-card">
+          <Label class="set-name" text="Developer"/>
+          <Label class="set-desc" text="OSL and OML are interpreted at runtime. Open the welcome guide to read the language reference."/>
+          <HBox gap="8">
+            <Button icon="book" text="Open guide" onclick="openGuide()"/>
+            <Button icon="code" text="Sample script" onclick="openSample()"/>
+          </HBox>
+        </VBox>
+      </VBox>
+
+      <VBox if="{tab == 'storage'}" gap="16">
+        <Label class="set-h" text="Storage"/>
+        <VBox class="ui-card set-card">
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="osvfs (IndexedDB)"/>
+              <Label class="set-desc" text="{t('{0} files · {1} used of 8 MB', fileCount, sizeText)}"/>
+            </VBox>
+            <Label class="ui-badge" text="{percent}%"/>
+          </HBox>
+          <Progress value="{percent}"/>
+          <Label class="set-desc" text="Every file you create is stored in the browser and survives a reload."/>
+        </VBox>
+        <VBox class="ui-card set-card">
+          <Label class="set-name" text="Factory reset"/>
+          <Label class="set-desc" text="Restore the original file tree and remove all user files. Settings are kept."/>
+          <HBox>
+            <Button icon="trash" text="Reset file system" variant="danger" onclick="confirmReset()"/>
+          </HBox>
+        </VBox>
+      </VBox>
+    </Scroll>
+  </HBox>
+</Window>

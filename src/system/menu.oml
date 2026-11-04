@@ -1,0 +1,10 @@
+<Stack class="ctx-menu" style="left:{x}px; top:{y}px">
+  <For each="items" as="it">
+    <Divider if="{it.sep}"/>
+    <Button class="ctx-item {it.danger ? 'danger' : ''}" variant="ghost" if="{!it.sep}" onclick="pick(it)">
+      <Icon name="{it.icon}" size="15" if="{it.icon}"/>
+      <Label text="{it.label}"/>
+      <Label class="ctx-kbd" text="{it.kbd}" if="{it.kbd}"/>
+    </Button>
+  </For>
+</Stack>

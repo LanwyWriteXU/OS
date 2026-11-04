@@ -1,0 +1,38 @@
+# calculator.osl — expression evaluation is delegated to the OSL evaluator.
+
+let expr = ""
+let display = "0"
+let justEval = False
+
+fn press(k):
+    if k == "C":
+        expr = ""
+        display = "0"
+        justEval = False
+    elif k == "back":
+        if len(expr) > 0:
+            expr = expr[:len(expr) - 1]
+        display = expr
+        if display == "":
+            display = "0"
+    elif k == "=":
+        if expr == "":
+            return
+        try:
+            let value = eval(expr)
+            display = str(value)
+            expr = display
+            justEval = True
+        except e:
+            display = "Error"
+            expr = ""
+    else:
+        if justEval:
+            if k in "+-*/":
+                expr = display
+            else:
+                expr = ""
+            justEval = False
+        expr = expr + k
+        display = expr
+    refresh()

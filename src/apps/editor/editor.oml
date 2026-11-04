@@ -1,0 +1,40 @@
+<Window title="Editor" icon="app-editor">
+  <VBox class="editor">
+    <HBox class="editor-bar">
+      <Button icon="file-plus" text="New" onclick="newFile()"/>
+      <Button icon="folder" text="Open" onclick="askOpen()"/>
+      <Button icon="save" text="Save" variant="primary" onclick="save()"/>
+      <Spacer/>
+      <Label class="path" text="{path == '' ? t('Untitled') : paths.relative(path)}"/>
+      <Label class="dot" text="●" if="{dirty}"/>
+    </HBox>
+    <TextArea class="editor-area" bind="text" flex="1" oninput="onEdit()" onkeydown="onKey(event)" spellcheck="false"/>
+    <HBox class="editor-status">
+      <Label text="{dirty ? t('Unsaved changes') : t('Saved')}" flex="1"/>
+      <Label text="{t('{0} words · {1} lines · {2} chars', words, lines, chars)}"/>
+    </HBox>
+
+    <VBox class="picker-mask" if="{pickerOpen}">
+      <VBox class="picker">
+        <HBox class="picker-head">
+          <Icon name="folder" size="16"/>
+          <Label class="picker-path" text="{pickerTitle()}" flex="1"/>
+          <IconButton icon="x" title="Close" onclick="closePicker()"/>
+        </HBox>
+        <Scroll class="picker-list" flex="1">
+          <For each="pickerItems()" as="f">
+            <Button class="picker-item" onclick="pickEntry(f)">
+              <Icon name="{f.type == 'dir' ? 'folder' : 'file-text'}" size="18"/>
+              <Label class="picker-name" text="{f.name}" flex="1"/>
+              <Label class="picker-size" text="{f.type == 'dir' ? '' : fs.sizeText(f.size)}"/>
+            </Button>
+          </For>
+        </Scroll>
+        <HBox class="picker-foot">
+          <Label class="picker-hint" text="Choose a text file to open" flex="1"/>
+          <Button text="Cancel" onclick="closePicker()"/>
+        </HBox>
+      </VBox>
+    </VBox>
+  </VBox>
+</Window>

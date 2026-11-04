@@ -1,0 +1,163 @@
+# notes.osl — a small Markdown note pad backed by ~/Documents/Notes.
+
+let dir = "/home/user/Documents/Notes"
+let files = []
+let sel = ""
+let path = ""
+let text = ""
+let dirty = False
+let words = 0
+let chars = 0
+let statusText = ""
+
+fn onRefresh():
+    # Only derived data here: the buffer is owned by the user, never reloaded
+    # on refresh or the caret would jump while typing.
+    words = 0
+    chars = len(text)
+    for w in text.replace("\n", " ").split(" "):
+        if w.strip() != "":
+            words += 1
+    if dirty:
+        statusText = t("Unsaved changes")
+    else:
+        statusText = t("Saved")
+
+fn ensureDir():
+    if not fs.exists(dir):
+        fs.mkdir(dir)
+
+fn loadList():
+    ensureDir()
+    files = []
+    for f in fs.list(dir):
+        if f.type == "file" and (f.ext == "md" or f.ext == "txt"):
+            files.append(f)
+    if len(files) == 0:
+        seed()
+        for f in fs.list(dir):
+            if f.type == "file" and (f.ext == "md" or f.ext == "txt"):
+                files.append(f)
+
+fn seed():
+    let p = paths.join(dir, "Welcome.md")
+    if fs.exists(p):
+        return
+    fs.write(p, "# Welcome to Notes\n\nEverything you type here is a plain Markdown file in\n~/Documents/Notes. Create as many notes as you like.\n\n- Click a note on the left to open it\n- Press Save (Ctrl+S is handled by the editor app)\n- Notes survive a reload because they live in the file system\n")
+
+fn setTitle():
+    if path == "":
+        win.setTitle(t("Notes"))
+    else:
+        win.setTitle(paths.basename(path) + " — " + t("Notes"))
+
+fn openNote(p):
+    if dirty and path != "":
+        saveNow()
+    sel = p
+    path = p
+    text = fs.read(p)
+    dirty = False
+    setTitle()
+    refresh()
+
+fn saveNow():
+    if path == "":
+        return
+    fs.write(path, text)
+    dirty = False
+    statusText = t("Saved")
+
+fn save():
+    if path == "":
+        newNote()
+        return
+    saveNow()
+    ui.toast(t("Saved"), "save")
+    refresh()
+
+fn onEdit():
+    dirty = True
+    refresh()
+
+fn newNote():
+    ui.prompt(t("Note name"), "Note.md", createNote)
+
+fn createNote(name):
+    if name == "":
+        return
+    ensureDir()
+    let fileName = name
+    if paths.extname(fileName) == "":
+        fileName = fileName + ".md"
+    let p = paths.join(dir, fileName)
+    if fs.exists(p):
+        ui.toast(t("Already exists: ") + fileName, "alert")
+        return
+    fs.write(p, "# " + paths.basename(fileName) + "\n\n")
+    loadList()
+    openNote(p)
+    ui.toast(t("Created ") + fileName, "file-plus")
+
+fn deleteNote():
+    if path == "":
+        return
+    ui.confirm(t("Delete") + " \"" + paths.basename(path) + "\"?", doDelete, t("Delete note"))
+
+fn doDelete():
+    if path == "" or not fs.exists(path):
+        return
+    let name = paths.basename(path)
+    fs.remove(path)
+    path = ""
+    sel = ""
+    text = ""
+    dirty = False
+    loadList()
+    if len(files) > 0:
+        openNote(files[0].path)
+    else:
+        refresh()
+    ui.toast(t("Deleted ") + name, "trash")
+
+fn noteMenu(f, e):
+    e.stop()
+    sel = f.path
+    ui.menu([
+        {"label": t("Open"), "icon": "external", "id": "open"},
+        {"label": t("Rename"), "icon": "pen", "id": "rename"},
+        {"sep": True},
+        {"label": t("Delete"), "icon": "trash", "danger": True, "id": "delete"},
+    ], noteMenuPick, e.x, e.y)
+
+fn noteMenuPick(it):
+    let id = it.get("id")
+    if id == "open":
+        openNote(sel)
+    elif id == "rename":
+        ui.prompt(t("Rename"), paths.basename(sel), renameNote)
+    elif id == "delete":
+        path = sel
+        deleteNote()
+    refresh()
+
+fn renameNote(name):
+    if name == "" or sel == "":
+        return
+    let target = paths.join(dir, name)
+    if fs.exists(target):
+        ui.toast(t("Already exists: ") + name, "alert")
+        return
+    fs.rename(sel, target)
+    if path == sel:
+        path = target
+    sel = target
+    loadList()
+    setTitle()
+    refresh()
+
+loadList()
+if len(files) > 0:
+    openNote(files[0].path)
+else:
+    refresh()

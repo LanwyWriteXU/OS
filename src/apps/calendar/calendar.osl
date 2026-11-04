@@ -1,0 +1,79 @@
+# calendar.osl — a month view. Pure OSL: dates come from the time namespace.
+
+let now = time.now()
+let base = time.parts(now)
+let todayYear = base.get("year")
+let todayMonth = base.get("month")
+let todayDay = base.get("day")
+let year = todayYear
+let month = todayMonth
+let cells = []
+let weekdays = []
+let header = ""
+let selText = ""
+let dayCount = 0
+
+fn weekdayNames():
+    let out = []
+    let ref = time.make(2024, 1, 7)
+    let i = 0
+    while i < 7:
+        out.append(time.intl(ref + i * 86400000, "weekdayShort"))
+        i += 1
+    weekdays = out
+
+fn build():
+    let first = time.make(year, month, 1)
+    let fp = time.parts(first)
+    let offset = fp.get("weekday")
+    let days = fp.get("daysInMonth")
+    dayCount = days
+    header = time.intl(first, "monthYear")
+    cells = []
+    let i = 0
+    while i < offset:
+        cells.append({"key": "pad-" + str(i), "day": "", "label": "", "today": False, "date": 0})
+        i += 1
+    let d = 1
+    while d <= days:
+        let isToday = year == todayYear and month == todayMonth and d == todayDay
+        cells.append({
+            "key": "d-" + str(year) + "-" + str(month) + "-" + str(d),
+            "day": d,
+            "label": str(d),
+            "today": isToday,
+            "date": time.make(year, month, d),
+        })
+        d += 1
+    selText = time.intl(first, "full")
+    if year == todayYear and month == todayMonth:
+        selText = time.intl(now, "full")
+
+fn pickDay(c):
+    selText = time.intl(c.get("date"), "full")
+    refresh()
+
+fn prevMonth():
+    month -= 1
+    if month < 1:
+        month = 12
+        year -= 1
+    build()
+    refresh()
+
+fn nextMonth():
+    month += 1
+    if month > 12:
+        month = 1
+        year += 1
+    build()
+    refresh()
+
+fn goToday():
+    year = todayYear
+    month = todayMonth
+    build()
+    refresh()
+
+weekdayNames()
+build()

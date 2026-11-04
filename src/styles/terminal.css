@@ -1,0 +1,52 @@
+/* ============================================================
+   Terminal
+   ============================================================ */
+.term-wrap { background: #0b0f16; height: 100%; }
+.term {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #0b0f16;
+  color: #d7e2f5;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.35;
+  padding: 10px 12px 4px;
+  cursor: text;
+  overflow: hidden;
+}
+.term-out { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; white-space: pre-wrap; word-break: break-word; padding-right: 4px; user-select: text; }
+.term-line { min-height: 1.35em; white-space: pre-wrap; }
+/* Fastfetch-style block art: collapse the line box so glyphs stack seamlessly */
+.term-line.tight {
+  line-height: 0.9;
+  min-height: 0;
+  text-rendering: geometricPrecision;
+}
+.term-line.tight span { line-height: 0.9; }
+.term-inputline { display: flex; align-items: flex-start; gap: 0; padding: 2px 0 6px; flex: none; }
+.term-prompt { flex: none; white-space: pre; }
+.term-prompt .p-user { color: #7ee0a8; font-weight: 600; }
+.term-prompt .p-host { color: #7ee0a8; }
+.term-prompt .p-path { color: #7cb7ff; font-weight: 600; }
+.term-prompt .p-sign { color: #8b93a7; }
+.term-input {
+  flex: 1; min-width: 0; background: transparent; border: none; outline: none;
+  color: #e7eefc; font-family: var(--mono); font-size: 12.5px; line-height: 1.35;
+  padding: 0; caret-color: #7cb7ff; user-select: text;
+}
+.term-cursor-hint { color: #6b7688; }
+
+/* ANSI SGR palette */
+.a0 { color: #5c6779; } .a1 { color: #ff7b72; } .a2 { color: #7ee0a8; } .a3 { color: #f2cc60; }
+.a4 { color: #6cb6ff; } .a5 { color: #d2a8ff; } .a6 { color: #56d4dd; } .a7 { color: #d7e2f5; }
+.a8 { color: #8b97ab; } .a9 { color: #ffa198; } .a10 { color: #a6f0c6; } .a11 { color: #f8e39b; }
+.a12 { color: #a5d6ff; } .a13 { color: #e2c5ff; } .a14 { color: #9cecf3; } .a15 { color: #ffffff; }
+.b0 { background: #2a2f3a; } .b1 { background: #7d2b2b; } .b2 { background: #23573a; } .b3 { background: #6b5620; }
+.b4 { background: #244a75; } .b5 { background: #4b3568; } .b6 { background: #1f5a5e; } .b7 { background: #3c475a; }
+.ba0 { background: #6b7484; } .ba1 { background: #ff7b72; } .ba2 { background: #7ee0a8; } .ba3 { background: #f2cc60; }
+.ba4 { background: #6cb6ff; } .ba5 { background: #d2a8ff; } .ba6 { background: #56d4dd; } .ba7 { background: #e7eefc; }
+.ab { font-weight: 700; }
+.ad { opacity: 0.65; }
+.au { text-decoration: underline; }
+.term a { color: #6cb6ff; }

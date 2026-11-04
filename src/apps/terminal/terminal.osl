@@ -1,0 +1,2 @@
+# terminal.osl — the terminal is a native control, so this file only documents
+# how the window is configured. The shell itself lives in src/shell/.

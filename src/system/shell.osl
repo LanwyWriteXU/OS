@@ -1,0 +1,528 @@
+# shell.osl — the desktop shell. Drives shell.oml: taskbar, start menu, dock,
+# desktop icons, notifications and the macOS menu bar.
+#
+# Every desktop icon is a real file inside /home/user/Desktop. A `.desktop`
+# file is a shortcut: its content is an application id.
+
+let style = "win"
+let theme = "dark"
+let wallpaper = "aurora"
+let user = "origin"
+let avatar = "O"
+let uiLang = "en"
+let clock24 = True
+let clock = ""
+let dateStr = ""
+let batteryText = "82%"
+let apps = []
+let deskIcons = []
+let running = []
+let notifs = []
+let recent = []
+let hits = []
+let search = ""
+let startOpen = False
+let activeMenu = ""
+let menuX = 40
+let activeApp = "Finder"
+let deskSel = ""
+let menuTarget = ""
+let places = []
+let searchOpen = False
+
+# ---------------------------------------------------------------- refresh
+
+fn tickClock():
+    clock = time.format(time.now(), clock24 ? "HH:mm" : "hh:mm A")
+    dateStr = time.format(time.now(), "ddd, MMM d")
+    batteryText = "82%"
+
+fn findApp(id):
+    for a in apps:
+        if a.id == id:
+            return a
+    return None
+
+fn findAppName(id):
+    let a = findApp(id)
+    if a == None:
+        return id
+    return a.name
+
+fn onRefresh():
+    let s = sys.settings()
+    style = s.get("style")
+    theme = s.get("theme")
+    wallpaper = s.get("wallpaper")
+    user = s.get("user")
+    uiLang = s.get("lang")
+    clock24 = s.get("clock24")
+    apps = sys.apps()
+    running = sys.windows()
+    notifs = sys.notifications()
+    recent = sys.recent()
+    avatar = user[:1].upper()
+    tickClock()
+    places = [
+        {"name": t("Home"), "path": "/home/user", "icon": "home"},
+        {"name": t("Desktop"), "path": "/home/user/Desktop", "icon": "monitor"},
+        {"name": t("Documents"), "path": "/home/user/Documents", "icon": "file-text"},
+        {"name": t("Downloads"), "path": "/home/user/Downloads", "icon": "download"},
+        {"name": t("Pictures"), "path": "/home/user/Pictures", "icon": "image"},
+        {"name": t("Projects"), "path": "/home/user/Projects", "icon": "code"},
+    ]
+    activeApp = "Finder"
+    for w in running:
+        if w.active:
+            activeApp = findAppName(w.appId)
+    rebuildDesktop()
+
+fn rebuildDesktop():
+    let out = []
+    let nodes = fs.list("/home/user/Desktop")
+    for n in nodes:
+        if n.name.startswith("."):
+            continue
+        let icon = "file-text"
+        let label = n.name
+        let appId = ""
+        if n.type == "dir":
+            icon = "folder"
+        elif n.ext == "desktop":
+            appId = fs.read(n.path).strip()
+            let a = findApp(appId)
+            if a != None:
+                icon = a.icon
+                label = a.name
+            else:
+                icon = "alert"
+        elif n.ext == "osl" or n.ext == "oml":
+            icon = "code"
+        elif n.ext == "png" or n.ext == "jpg" or n.ext == "svg":
+            icon = "image"
+        elif n.ext == "md" or n.ext == "txt":
+            icon = "file-text"
+        out.append({
+            "name": label,
+            "file": n.name,
+            "path": n.path,
+            "type": n.type,
+            "icon": icon,
+            "app": appId,
+        })
+    deskIcons = out
+
+fn tick():
+    tickClock()
+    refresh()
+
+every(1000, tick)
+
+# ---------------------------------------------------------------- search
+
+fn walk(path, depth):
+    let out = []
+    if depth > 4:
+        return out
+    let items = fs.list(path)
+    for n in items:
+        if n.name.startswith("."):
+            continue
+        if n.type == "file":
+            out.append(n)
+        else:
+            let sub = walk(n.path, depth + 1)
+            for x in sub:
+                if len(out) < 80:
+                    out.append(x)
+    return out
+
+fn updateHits():
+    hits = []
+    if search == "":
+        return
+    let q = search.lower()
+    for f in walk("/home/user", 0):
+        if f.name.lower().find(q) >= 0:
+            hits.append(f)
+
+fn doSearch():
+    updateHits()
+    refresh()
+
+fn filteredApps():
+    if search == "":
+        return apps
+    let out = []
+    let q = search.lower()
+    for a in apps:
+        if a.name.lower().find(q) >= 0:
+            out.append(a)
+    return out
+
+fn filteredRecent():
+    if search == "":
+        return recent
+    let out = []
+    let q = search.lower()
+    for r in recent:
+        if r.name.lower().find(q) >= 0:
+            out.append(r)
+    return out
+
+# ---------------------------------------------------------------- launch
+
+fn launch(id):
+    startOpen = False
+    activeMenu = ""
+    search = ""
+    hits = []
+    sys.open(id)
+    refresh()
+
+fn openRecent(p):
+    startOpen = False
+    search = ""
+    sys.openPath(p)
+    refresh()
+
+fn goPlace(p):
+    startOpen = False
+    search = ""
+    sys.open("files", {"path": p})
+    refresh()
+
+fn selectDesktop(path):
+    deskSel = path
+    refresh()
+
+fn openItem(it):
+    let appId = it.get("app")
+    deskSel = it.get("path")
+    if appId != "":
+        launch(appId)
+    else:
+        sys.openPath(it.get("path"))
+        refresh()
+
+# ---------------------------------------------------------------- start menu
+
+fn toggleStart():
+    startOpen = not startOpen
+    activeMenu = ""
+    if not startOpen:
+        search = ""
+        hits = []
+    refresh()
+
+fn closeMenus():
+    if startOpen or activeMenu != "":
+        startOpen = False
+        activeMenu = ""
+        refresh()
+
+fn showDesktop():
+    sys.minimizeAll()
+    startOpen = False
+    refresh()
+
+fn taskClick(id):
+    for w in sys.windows():
+        if w.id == id:
+            if w.minimized:
+                sys.focusWindow(id)
+            elif w.active:
+                sys.minimizeWindow(id)
+            else:
+                sys.focusWindow(id)
+    refresh()
+
+fn isRunning(appId):
+    for w in running:
+        if w.appId == appId and not w.minimized:
+            return True
+    return False
+
+fn dismissNotif(id):
+    sys.dismissNotification(id)
+    refresh()
+
+# ---------------------------------------------------------------- menus
+
+fn toggleMenu(name, e):
+    if activeMenu == name:
+        activeMenu = ""
+    else:
+        activeMenu = name
+        # Anchoring on the clicked menu-bar item keeps the drop-down aligned
+        # even when the event carries no coordinates (keyboard / synthetic).
+        let el = e.target
+        let item = el.closest(".mb-item") if el.closest != None else None
+        if item != None:
+            menuX = item.getBoundingClientRect().left
+        else:
+            menuX = e.x - 12
+    refresh()
+
+fn menuItems():
+    if activeMenu == "apple":
+        return [
+            {"label": t("About This OS"), "id": "about"},
+            {"sep": True},
+            {"label": t("System Settings…"), "id": "settings"},
+            {"label": t("Toggle Light / Dark"), "id": "theme"},
+            {"sep": True},
+            {"label": t("Lock Screen"), "id": "lock"},
+            {"label": t("Restart"), "id": "restart"},
+            {"label": t("Shut Down"), "id": "shutdown"},
+        ]
+    if activeMenu == "file":
+        return [
+            {"label": t("New Terminal Window"), "id": "terminal"},
+            {"label": t("New Editor Window"), "id": "editor"},
+            {"label": t("New File Manager Window"), "id": "files"},
+            {"sep": True},
+            {"label": t("Close Window"), "id": "close"},
+        ]
+    if activeMenu == "view":
+        return [
+            {"label": t("Grid Wallpaper"), "id": "wall"},
+            {"label": t("Windows Style"), "id": "win"},
+            {"label": t("macOS Style"), "id": "mac"},
+            {"sep": True},
+            {"label": t("Minimize All"), "id": "showdesk"},
+        ]
+    if activeMenu == "help":
+        return [
+            {"label": t("Welcome Guide"), "id": "welcome"},
+            {"label": t("Keyboard Shortcuts"), "id": "keys"},
+            {"label": t("About OS"), "id": "about"},
+        ]
+    if activeMenu == "app":
+        return [
+            {"label": t("About") + " " + activeApp, "id": "about"},
+            {"label": t("System Settings…"), "id": "settings"},
+            {"sep": True},
+            {"label": t("Close Window"), "id": "close"},
+        ]
+    return []
+
+fn menuPick(mi):
+    let id = mi.get("id")
+    activeMenu = ""
+    if id == "about":
+        sys.open("about")
+    elif id == "settings":
+        sys.open("settings")
+    elif id == "theme":
+        sys.setSetting("theme", theme == "dark" ? "light" : "dark")
+    elif id == "lock":
+        sys.lock()
+    elif id == "restart":
+        sys.power("reboot")
+    elif id == "shutdown":
+        sys.power("off")
+    elif id == "terminal" or id == "editor" or id == "files":
+        sys.open(id)
+    elif id == "close":
+        for w in sys.windows():
+            if w.active:
+                sys.closeWindow(w.id)
+    elif id == "wall":
+        sys.open("settings", {"tab": "appearance"})
+    elif id == "win" or id == "mac":
+        sys.setSetting("style", id)
+    elif id == "showdesk":
+        sys.minimizeAll()
+    elif id == "welcome":
+        sys.openPath("/home/user/Documents/welcome.md")
+    elif id == "keys":
+        ui.alert(
+            "Alt+Tab  — switch windows\nAlt+F4 / Ctrl+W  — close window\nCtrl+Alt+T  — new terminal\nCtrl+Space  — start menu\nCtrl+S  — save in editor",
+            t("Keyboard shortcuts"),
+        )
+    refresh()
+
+# ---------------------------------------------------------- desktop menu
+
+fn desktopMenu(e):
+    if e.target.closest(".win") != None:
+        return
+    if e.target.closest(".start-menu") != None:
+        return
+    if e.target.closest(".desk-icon") != None:
+        return
+    ui.menu([
+        {"label": t("New folder"), "icon": "folder-plus", "id": "newfolder"},
+        {"label": t("New file"), "icon": "file-plus", "id": "newfile"},
+        {"label": t("New shortcut"), "icon": "apps", "id": "shortcut"},
+        {"sep": True},
+        {"label": t("Open Terminal"), "icon": "terminal", "id": "terminal"},
+        {"label": t("Change wallpaper"), "icon": "image", "id": "wallpaper"},
+        {"label": t("Display settings"), "icon": "monitor", "id": "settings"},
+        {"sep": True},
+        {"label": t("Refresh desktop"), "icon": "refresh", "id": "refresh"},
+        {"label": t("About OS"), "icon": "info", "id": "about"},
+    ], desktopMenuPick, e.x, e.y)
+
+fn desktopMenuPick(it):
+    let id = it.get("id")
+    if id == "newfolder":
+        ui.prompt(t("New folder"), t("New folder"), createFolder)
+    elif id == "newfile":
+        ui.prompt(t("New file"), "untitled.txt", createFile)
+    elif id == "shortcut":
+        shortcutMenu()
+    elif id == "terminal":
+        sys.open("terminal")
+    elif id == "settings" or id == "wallpaper":
+        sys.open("settings", {"tab": "appearance"})
+    elif id == "about":
+        sys.open("about")
+    elif id == "refresh":
+        rebuildDesktop()
+        ui.toast(t("Refreshed"), "refresh")
+    refresh()
+
+fn shortcutMenu():
+    let items = []
+    for a in apps:
+        items.append({"label": a.name, "icon": a.icon, "id": a.id})
+    ui.menu(items, shortcutPick)
+
+fn shortcutPick(it):
+    let id = it.get("id")
+    let a = findApp(id)
+    if a == None:
+        return
+    let p = paths.join("/home/user/Desktop", id + ".desktop")
+    if fs.exists(p):
+        ui.toast(t("Already exists: ") + a.name, "alert")
+        return
+    fs.write(p, id)
+    rebuildDesktop()
+    ui.toast(t("Created ") + a.name, "app-about")
+    refresh()
+
+fn deskIconMenu(it, e):
+    e.stop()
+    menuTarget = it.get("path")
+    deskSel = menuTarget
+    let items = [
+        {"label": t("Open"), "icon": "external", "id": "open"},
+        {"label": t("Open in Files"), "icon": "folder", "id": "reveal"},
+        {"sep": True},
+        {"label": t("Rename"), "icon": "pen", "id": "rename"},
+        {"label": t("Duplicate"), "icon": "copy", "id": "duplicate"},
+        {"label": t("Delete"), "icon": "trash", "danger": True, "id": "delete"},
+    ]
+    ui.menu(items, deskIconPick, e.x, e.y)
+
+fn deskIconPick(it):
+    let id = it.get("id")
+    if menuTarget == "":
+        return
+    if id == "open":
+        sys.openPath(menuTarget)
+    elif id == "reveal":
+        sys.open("files", {"path": "/home/user/Desktop"})
+    elif id == "rename":
+        ui.prompt(t("Rename"), paths.basename(menuTarget), renameDeskItem)
+    elif id == "duplicate":
+        let target = paths.join(paths.dirname(menuTarget), "copy of " + paths.basename(menuTarget))
+        if not fs.exists(target):
+            fs.copy(menuTarget, target)
+            rebuildDesktop()
+    elif id == "delete":
+        ui.confirm(t("Delete") + " \"" + paths.basename(menuTarget) + "\"?", deleteDeskItem, t("Delete"))
+    refresh()
+
+fn renameDeskItem(name):
+    if menuTarget == "" or name == "":
+        return
+    let target = paths.join(paths.dirname(menuTarget), name)
+    if fs.exists(target):
+        ui.toast(t("Already exists: ") + name, "alert")
+        return
+    fs.rename(menuTarget, target)
+    menuTarget = target
+    rebuildDesktop()
+    refresh()
+
+fn deleteDeskItem():
+    if menuTarget == "" or not fs.exists(menuTarget):
+        return
+    let name = paths.basename(menuTarget)
+    fs.remove(menuTarget)
+    menuTarget = ""
+    deskSel = ""
+    rebuildDesktop()
+    ui.toast(t("Deleted ") + name, "trash")
+    refresh()
+
+fn createFolder(name):
+    if name == "":
+        return
+    let p = paths.join("/home/user/Desktop", name)
+    if fs.exists(p):
+        ui.toast(t("Already exists: ") + name, "alert")
+        return
+    fs.mkdir(p)
+    rebuildDesktop()
+    ui.toast(t("Created ") + name, "folder-plus")
+    refresh()
+
+fn createFile(name):
+    if name == "":
+        return
+    let p = paths.join("/home/user/Desktop", name)
+    if fs.exists(p):
+        ui.toast(t("Already exists: ") + name, "alert")
+        return
+    fs.write(p, "")
+    rebuildDesktop()
+    ui.toast(t("Created ") + name, "file-plus")
+    refresh()
+
+# ---------------------------------------------------------------- tray
+
+fn trayMenu(e):
+    ui.menu([
+        {"label": t("Wi-Fi: connected"), "icon": "wifi", "id": "noop"},
+        {"label": t("Volume: 62%"), "icon": "volume", "id": "noop"},
+        {"label": t("Battery: 82%"), "icon": "battery", "id": "noop"},
+        {"sep": True},
+        {"label": t("Theme: ") + theme, "icon": theme == "dark" ? "moon" : "sun", "id": "theme"},
+        {"label": t("All settings"), "icon": "settings", "id": "settings"},
+    ], trayPick, e.x, e.y)
+
+fn trayPick(it):
+    let id = it.get("id")
+    if id == "theme":
+        sys.setSetting("theme", theme == "dark" ? "light" : "dark")
+    elif id == "settings":
+        sys.open("settings")
+    refresh()
+
+fn openCalendar():
+    sys.open("calendar")
+
+fn powerMenu():
+    ui.menu([
+        {"label": t("Lock"), "icon": "lock", "id": "lock"},
+        {"label": t("Restart"), "icon": "refresh", "id": "reboot"},
+        {"label": t("Shut down"), "icon": "power", "id": "off"},
+    ], powerPick)
+
+fn powerPick(it):
+    let id = it.get("id")
+    if id == "lock":
+        sys.lock()
+    elif id == "reboot" or id == "off":
+        sys.power(id)
+    refresh()
+
+fn lockScreen():
+    sys.lock()
+
+onRefresh()

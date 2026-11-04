@@ -1,0 +1,34 @@
+<Window title="About OS" icon="app-about">
+  <VBox class="about">
+    <HBox class="about-hero">
+      <Div class="about-logo"><Icon name="app-about" size="46"/></Div>
+      <VBox>
+        <Label class="about-name" text="OS"/>
+        <Label class="about-sub" text="ORIGIN SYSTEM · 1.1"/>
+      </VBox>
+    </HBox>
+    <Label class="ui-muted" text="A toy desktop environment built with two small languages: OSL for behaviour, OML for every pixel of the interface."/>
+    <Divider/>
+    <VBox class="spec-grid">
+      <Label text="Version"/><Label text="1.1 (Origin)"/>
+      <Label text="Kernel"/><Label text="osk 1.0.0"/>
+      <Label text="Shell"/><Label text="osh 1.0"/>
+      <Label text="Languages"/><Label text="OSL 1.1 · OML 1.1"/>
+      <Label text="Window manager"/><Label text="OWM (drag, snap, resize)"/>
+      <Label text="File system"/><Label text="IndexedDB · osvfs"/>
+      <Label text="Uptime"/><Label text="{uptimeText}"/>
+      <Label text="Processor"/><Label text="{t('{0} virtual cores', cores)}"/>
+      <Label text="Display"/><Label text="{resolution}"/>
+      <Label text="Memory"/><Label text="{memory}"/>
+      <Label text="Files"/><Label text="{t('{0} files · {1}', fileCount, sizeText)}"/>
+      <Label text="Renderer"/><Label text="OML 1.1 · keyed bindings"/>
+    </VBox>
+    <Divider/>
+    <HBox gap="8">
+      <Button icon="book" text="Welcome guide" variant="primary" onclick="openGuide()"/>
+      <Button icon="terminal" text="Terminal" onclick="openTerm()"/>
+      <Button icon="refresh" text="Check updates" onclick="checkUpdates()"/>
+    </HBox>
+    <Label class="about-line" text="© 2026 Origin Software. Built as a single-page web app; no servers were harmed."/>
+  </VBox>
+</Window>
