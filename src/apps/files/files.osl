@@ -11,6 +11,8 @@ let view = "grid"
 let sel = ""
 let entries = []
 let showHidden = False
+let menuX = 0
+let menuY = 0
 let pathEdit = False
 let pathDraft = ""
 let apps = sys.apps()
@@ -265,7 +267,9 @@ fn menuFor(f, e):
     let apps = openWithApps(f)
     if len(apps) > 0:
         items.append({"sep": True})
-        items.append({"label": t("Open with"), "icon": "apps", "id": "openwith"})
+        items.append({"label": t("Open with"), "icon": "apps", "id": "openwith", "cascade": True})
+    menuX = e.x
+    menuY = e.y
     ui.menu(items, fileMenuPick, e.x, e.y)
 
 fn openWithMenu(f):
@@ -273,7 +277,8 @@ fn openWithMenu(f):
     let items = []
     for a in apps:
         items.append({"label": a.get("label"), "icon": a.get("icon"), "id": a.get("id")})
-    ui.menu(items, openWithPick)
+    # Cascade next to the parent menu instead of replacing it.
+    ui.menu(items, openWithPick, menuX + 190, menuY + 32, True)
 
 fn openWithPick(it):
     if sel == "":
@@ -309,7 +314,6 @@ fn fileMenuPick(it):
         for f in entries:
             if f.path == sel:
                 openWithMenu(f)
-        ui.toast(t("Path copied"), "copy")
     refresh()
 
 fn statusText():

@@ -56,6 +56,7 @@ let hoverApp = ""
 let previewX = 12
 let previewHeld = False
 let previewPending = False
+let previewToken = 0
 
 # ---------------------------------------------------------------- refresh
 
@@ -535,6 +536,9 @@ fn previewItems():
 
 fn previewShow(item, e):
     let id = item.get("appId")
+    # Invalidate any pending hide so moving between adjacent buttons does not
+    # briefly show then dismiss the preview.
+    previewToken += 1
     if len(windowsOf(id)) == 0:
         # Hovering a pinned-but-idle icon offers to launch instead.
         if hoverApp != id:
@@ -560,9 +564,14 @@ fn previewShow(item, e):
         previewHeld = False
 
 fn previewHide():
-    after(180, previewMaybeHide)
+    let token = previewToken
+    after(180, fn():
+        previewMaybeHide(token)
+    )
 
-fn previewMaybeHide():
+fn previewMaybeHide(token):
+    if token != previewToken:
+        return
     if previewHeld:
         return
     if hoverApp == "":
@@ -575,7 +584,10 @@ fn previewHold():
 
 fn previewLeave():
     previewHeld = False
-    after(80, previewMaybeHide)
+    let token = previewToken
+    after(80, fn():
+        previewMaybeHide(token)
+    )
 
 fn previewNew():
     let id = hoverApp

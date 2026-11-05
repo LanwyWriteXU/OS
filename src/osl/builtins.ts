@@ -365,7 +365,7 @@ export function createBuiltins(interp: Interpreter, host: Host): Record<string, 
       host.ui.toast(String(message), String(icon));
       return true;
     },
-    menu: (items: any, onPick: any, x: any = null, y: any = null) => {
+    menu: (items: any, onPick: any, x: any = null, y: any = null, keep: any = false) => {
       const list = Array.isArray(items) ? items : [];
       host.ui.menu(
         list,
@@ -374,6 +374,7 @@ export function createBuiltins(interp: Interpreter, host: Host): Record<string, 
         },
         x === null ? undefined : Number(x),
         y === null ? undefined : Number(y),
+        !!keep,
       );
       return true;
     },

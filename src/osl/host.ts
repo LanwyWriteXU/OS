@@ -50,7 +50,7 @@ export interface UiBridge {
   confirm(message: string, onOk: any, title?: string): void;
   prompt(title: string, value: string, onOk: any): void;
   toast(message: string, icon?: string): void;
-  menu(items: any[], onPick: any, x?: number, y?: number): void;
+  menu(items: any[], onPick: any, x?: number, y?: number, keep?: boolean): void;
   /** Opens a native image picker; `onPick` receives a data URL or ''. */
   chooseImage(onPick: (dataUrl: string) => void): void;
 }

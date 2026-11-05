@@ -137,10 +137,13 @@ export class Overlays {
     });
   }
 
-  menu(items: any[], onPick: (item: any) => void, x?: number, y?: number) {
-    // Only one context menu may be open at a time.
-    for (const old of Array.from(document.querySelectorAll('.overlay-host'))) {
-      if (old.querySelector('.ctx-menu')) old.remove();
+  menu(items: any[], onPick: (item: any) => void, x?: number, y?: number, keep = false) {
+    // Only one context menu may be open at a time, unless a cascading
+    // sub-menu opts to keep its parent (keep = true).
+    if (!keep) {
+      for (const old of Array.from(document.querySelectorAll('.overlay-host'))) {
+        if (old.querySelector('.ctx-menu')) old.remove();
+      }
     }
     const container = this.hostEl();
     const interp = new Interpreter();
@@ -157,6 +160,7 @@ export class Overlays {
       entry.set('danger', !!src.danger);
       entry.set('sep', !!src.sep);
       entry.set('kbd', src.kbd ?? null);
+      if (src.cascade) entry.set('cascade', true);
       if (src.id !== undefined) entry.set('id', src.id);
       if (src.action !== undefined) entry.set('action', src.action);
       if (src.disabled !== undefined) entry.set('disabled', !!src.disabled);
@@ -180,7 +184,9 @@ export class Overlays {
       document.removeEventListener('keydown', onKey);
     };
     const pick = (it: any) => {
-      close();
+      // A cascading item keeps its parent open so the sub-menu can nest.
+      const cascade = it instanceof Map ? it.get('cascade') === true : false;
+      if (!cascade) close();
       onPick(it);
     };
     const outside = (e: MouseEvent) => {

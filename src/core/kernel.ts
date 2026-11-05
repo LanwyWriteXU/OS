@@ -236,8 +236,11 @@ export class Kernel implements KernelApi {
     interp.loader = (p: string) => (this.vfs.exists(p) && !this.vfs.isDir(p) ? this.vfs.read(p) : null);
     interp.modulePath = '/home/user';
 
+    // The shell is editable too: /usr/share/os/shell.osl overrides the bundle.
+    const shellOslSrc = this.vfs.exists('/usr/share/os/shell.osl') ? this.vfs.read('/usr/share/os/shell.osl') : shellOsl;
+    const shellOmlSrc = this.vfs.exists('/usr/share/os/shell.oml') ? this.vfs.read('/usr/share/os/shell.oml') : shellOml;
     try {
-      interp.run(shellOsl, interp.globals);
+      interp.run(shellOslSrc, interp.globals);
     } catch (e: any) {
       console.error('[OSL:shell]', e);
       this.notify('Shell error', String(e?.message ?? e), 'alert');
@@ -252,7 +255,7 @@ export class Kernel implements KernelApi {
       }
     };
     try {
-      this.shellUi.mount(shellOml, interp.globals);
+      this.shellUi.mount(shellOmlSrc, interp.globals);
     } catch (e: any) {
       console.error('[OML:shell]', e);
       root.innerHTML = `<div class="fatal">Failed to mount the shell: ${escapeHtml(String(e?.message ?? e))}</div>`;
@@ -372,8 +375,15 @@ export class Kernel implements KernelApi {
     };
     this.log('app', `open ${app.id}`);
 
+    // Prefer the editable copy in the VFS so edits made in Files take effect;
+    // fall back to the bundled source if the file was removed.
+    const oslPath = `/usr/share/apps/${app.id}/${app.id}.osl`;
+    const omlPath = `/usr/share/apps/${app.id}/${app.id}.oml`;
+    const oslSrc = this.vfs.exists(oslPath) ? this.vfs.read(oslPath) : app.osl;
+    const omlSrc = this.vfs.exists(omlPath) ? this.vfs.read(omlPath) : app.oml;
+
     try {
-      interp.run(app.osl, interp.globals);
+      interp.run(oslSrc, interp.globals);
     } catch (e: any) {
       console.error(`[OSL:${app.id}]`, e);
       this.showAppError(win, e);
@@ -389,7 +399,7 @@ export class Kernel implements KernelApi {
     };
 
     try {
-      ui.mount(app.oml, interp.globals);
+      ui.mount(omlSrc, interp.globals);
     } catch (e: any) {
       console.error(`[OML:${app.id}]`, e);
       this.showAppError(win, e);
@@ -686,7 +696,7 @@ export class Kernel implements KernelApi {
       confirm: (message, onOk, title) => this.overlays.confirm(message, onOk, title),
       prompt: (title, value, onOk) => this.overlays.prompt(title, value, onOk),
       toast: (message, icon) => this.notify('OS', message, icon ?? 'check'),
-      menu: (items, onPick, x, y) => this.overlays.menu(items, onPick, x, y),
+      menu: (items, onPick, x, y, keep) => this.overlays.menu(items, onPick, x, y, keep),
       chooseImage: (onPick) => {
         const input = document.createElement('input');
         input.type = 'file';
@@ -722,7 +732,7 @@ export class Kernel implements KernelApi {
    */
   private seedSystemFiles() {
     const marker = '/etc/apps-seed';
-    const version = '3';
+    const version = '4';
     if (this.vfs.exists(marker) && this.vfs.read(marker).trim() === version) return;
     for (const d of [
       '/usr',
@@ -862,7 +872,7 @@ export class Kernel implements KernelApi {
         confirm: (m, cb, t) => this.overlays.confirm(m, cb, t),
         prompt: (t, v, cb) => this.overlays.prompt(t, v, cb),
         toast: (m, i) => this.notify('OS', m, i),
-        menu: (items, cb, x, y) => this.overlays.menu(items, cb, x, y),
+        menu: (items, cb, x, y, keep) => this.overlays.menu(items, cb, x, y, keep),
         chooseImage: (onPick) => this.uiBridge().chooseImage(onPick),
       },
       refresh: () => {},
