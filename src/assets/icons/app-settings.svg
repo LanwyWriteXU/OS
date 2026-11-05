@@ -1,12 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <defs>
-    <linearGradient id="a" x1="6" y1="6" x2="42" y2="42" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#8b9bb4"/><stop offset="1" stop-color="#3d4a5f"/>
-    </linearGradient>
-  </defs>
-  <rect x="3" y="3" width="42" height="42" rx="11" fill="url(#a)"/>
-  <path d="M24 15.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zm0 5.5a3 3 0 1 1 0 6 3 3 0 0 1 0-6z" fill="#ffffff"/>
-  <g stroke="#ffffff" stroke-width="3.4" stroke-linecap="round">
-    <path d="M24 8.5v3.2M24 36.3v3.2M8.5 24h3.2M36.3 24h3.2M13 13l2.3 2.3M32.7 32.7 35 35M35 13l-2.3 2.3M15.3 32.7 13 35"/>
+  <rect x="2.5" y="2.5" width="43" height="43" rx="12" fill="#26324a"/>
+  <rect x="2.5" y="2.5" width="43" height="43" rx="12" fill="#7c8ba1" fill-opacity="0.22"/>
+  <rect x="3.2" y="3.2" width="41.6" height="41.6" rx="11.3" fill="none" stroke="#ffffff" stroke-opacity="0.14"/>
+  <g fill="none" stroke="#ffffff" stroke-opacity="0.95" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M13 19h3.6"/>
+    <circle cx="20.4" cy="19" r="3.4"/>
+    <path d="M23.8 19h11.2"/>
+    <path d="M13 29h11.2"/>
+    <circle cx="28.4" cy="29" r="3.4"/>
+    <path d="M31.8 29h3.2"/>
   </g>
 </svg>

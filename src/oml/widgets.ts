@@ -294,6 +294,10 @@ export const LAYOUT_ATTRS = new Set([
 
 export function setIconSlot(el: HTMLElement, name: string, size = 16) {
   const slot = el.querySelector('.btn-icon') as HTMLElement | null;
+  const host = slot ?? el;
+  const key = `${name || ''}@${size}`;
+  if (host.dataset.iconKey === key) return;
+  host.dataset.iconKey = key;
   if (!slot) {
     if (!el.classList.contains('ui-iconbtn')) return;
     if (!name) {

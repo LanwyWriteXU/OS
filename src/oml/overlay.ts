@@ -138,6 +138,10 @@ export class Overlays {
   }
 
   menu(items: any[], onPick: (item: any) => void, x?: number, y?: number) {
+    // Only one context menu may be open at a time.
+    for (const old of Array.from(document.querySelectorAll('.overlay-host'))) {
+      if (old.querySelector('.ctx-menu')) old.remove();
+    }
     const container = this.hostEl();
     const interp = new Interpreter();
     const env = new Env(interp.globals);

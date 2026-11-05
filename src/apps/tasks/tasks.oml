@@ -1,0 +1,41 @@
+<Window title="Tasks" icon="app-tasks">
+  <VBox class="tasks">
+    <HBox class="tasks-head">
+      <VBox class="tasks-title" flex="1">
+        <Title text="Tasks"/>
+        <Label class="set-desc" text="{t('{0} open · {1} total', openCount(), len(items))}"/>
+      </VBox>
+      <HBox class="seg">
+        <Button text="To do" variant="ghost" class="{filter == 'open' ? 'on' : ''}" onclick="setFilter('open')"/>
+        <Button text="All" variant="ghost" class="{filter == 'all' ? 'on' : ''}" onclick="setFilter('all')"/>
+        <Button text="Done" variant="ghost" class="{filter == 'done' ? 'on' : ''}" onclick="setFilter('done')"/>
+      </HBox>
+      <IconButton icon="trash" title="Clear completed" onclick="clearDone()"/>
+    </HBox>
+
+    <HBox class="tasks-add">
+      <Input bind="draft" placeholder="What needs doing?" onkeydown="onKey(event)" flex="1"/>
+      <Button icon="plus" text="Add" variant="primary" onclick="add()"/>
+    </HBox>
+
+    <Scroll class="tasks-list" flex="1">
+      <For each="visible()" as="it" key="it.id">
+        <HBox class="tasks-row {it.done ? 'done' : ''}">
+          <IconButton icon="{it.done ? 'check' : 'square'}" title="Toggle" onclick="toggle(it)"/>
+          <Label class="tasks-text" text="{it.title}" flex="1"/>
+          <Div class="tasks-pri {it.priority}"/>
+          <IconButton icon="x" title="Remove" onclick="removeItem(it)"/>
+        </HBox>
+      </For>
+      <VBox class="empty" if="{len(visible()) == 0}">
+        <Icon name="check" size="38"/>
+        <Label text="Nothing here"/>
+      </VBox>
+    </Scroll>
+
+    <HBox class="tasks-foot">
+      <Label class="set-desc" text="{t('Saved to ~/Documents/tasks.json')}" flex="1"/>
+      <Label class="ui-badge" text="{len(items)}"/>
+    </HBox>
+  </VBox>
+</Window>

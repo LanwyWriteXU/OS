@@ -15,9 +15,11 @@ import type { Host } from '../osl/host';
 
 interface Mounted {
   update(): void;
+  /** Releases nodes mounted lazily (conditionals, lists) and their subtrees. */
+  dispose?(): void;
 }
 
-const staticNoop: Mounted = { update() {} };
+const staticNoop: Mounted = { update() {}, dispose() {} };
 
 function serialize(v: any, depth = 0): string {
   if (depth > 8) return '…';
@@ -38,6 +40,8 @@ export class UiInstance {
   rootEnv!: Env;
   private root: Mounted | null = null;
   private raf = 0;
+  /** Payload of the element currently being dragged (see drag-data). */
+  private dragPayload = '';
   private lastErrors = new Map<string, number>();
   onBeforeRefresh?: () => void;
   errors: string[] = [];
@@ -196,6 +200,14 @@ export class UiInstance {
     let mounted: Mounted | null = null;
     let nodes: ChildNode[] = [];
 
+    const unmount = () => {
+      if (!mounted) return;
+      mounted.dispose?.();
+      for (const n of nodes) n.remove();
+      nodes = [];
+      mounted = null;
+    };
+
     return {
       update: () => {
         let on = false;
@@ -214,11 +226,13 @@ export class UiInstance {
           if (host) host.insertBefore(frag, anchor);
           mounted = m;
         } else if (!on && mounted) {
-          for (const n of nodes) n.remove();
-          nodes = [];
-          mounted = null;
+          unmount();
         }
         if (mounted) mounted.update();
+      },
+      dispose: () => {
+        unmount();
+        anchor.remove();
       },
     };
   }
@@ -261,6 +275,40 @@ export class UiInstance {
       }
       if (name === 'if') continue;
 
+      if (name === 'focus') {
+        requestAnimationFrame(() => {
+          try {
+            (el as HTMLElement).focus();
+          } catch {
+            /* ignore */
+          }
+        });
+        continue;
+      }
+
+      if (name === 'draggable') {
+        const on = raw.includes('{') ? this.truthy(this.evalBinding(raw, env)) : raw === 'true';
+        el.draggable = on;
+        continue;
+      }
+
+      if (name === 'drag-data') {
+        el.addEventListener('dragstart', (ev) => {
+          try {
+            this.dragPayload = this.interp.toStr(this.evalBinding(raw, env));
+          } catch (e) {
+            this.reportError(e, `drag-data=${raw}`);
+          }
+          if (ev.dataTransfer) {
+            ev.dataTransfer.effectAllowed = 'move';
+            ev.dataTransfer.setData('text/plain', this.dragPayload);
+          }
+          el.classList.add('dragging');
+        });
+        el.addEventListener('dragend', () => el.classList.remove('dragging'));
+        continue;
+      }
+
       if (name.startsWith('on') && name.length > 2) {
         this.bindEvent(el, name.slice(2).toLowerCase(), raw, env);
         continue;
@@ -268,19 +316,32 @@ export class UiInstance {
 
       if (name === 'icon' || (name === 'name' && build.kind === 'icon')) {
         if (build.kind === 'window') continue;
+        const sizeAttr = attrs.size;
+        const sizeOf = (fallback: number) => {
+          if (sizeAttr === undefined) return fallback;
+          const n = Number(this.evalBinding(sizeAttr, env));
+          return Number.isFinite(n) && n > 0 ? n : fallback;
+        };
         updates.push(() => {
           const iconName = this.interpolate(raw, env);
           if (build.kind === 'icon') {
-            el.style.width = (attrs.size ?? '18') + 'px';
-            el.style.height = (attrs.size ?? '18') + 'px';
+            const size = sizeOf(18);
+            // Only touch the DOM when the glyph or size really changed:
+            // recreating the <svg> on every refresh cancelled clicks and
+            // double-clicks aimed at the icon inside a button.
+            const key = `${iconName}@${size}`;
+            if (el.dataset.iconKey === key) return;
+            el.dataset.iconKey = key;
+            el.style.width = size + 'px';
+            el.style.height = size + 'px';
             el.innerHTML = iconSvg(iconName);
             const svg = el.firstElementChild as SVGElement | null;
             if (svg) {
-              svg.setAttribute('width', attrs.size ?? '18');
-              svg.setAttribute('height', attrs.size ?? '18');
+              svg.setAttribute('width', String(size));
+              svg.setAttribute('height', String(size));
             }
           } else {
-            setIconSlot(el, iconName, Number(attrs.size ?? (build.kind === 'button' ? 15 : 17)));
+            setIconSlot(el, iconName, sizeOf(build.kind === 'button' ? 15 : 17));
           }
         });
         continue;
@@ -349,6 +410,15 @@ export class UiInstance {
       }
 
       if (name === 'title' || name === 'placeholder') {
+        // A <Window title> describes the OS window, not the DOM node. Writing
+        // it to the element made every descendant inherit the shell's title
+        // as a browser tooltip ("OS Shell" on every title bar).
+        if (build.kind === 'window' && name === 'title') {
+          const applyTitle = () =>
+            this.host.window.setTitle(raw.includes('{') ? this.interpolate(raw, env) : autoT(raw));
+          updates.push(applyTitle);
+          continue;
+        }
         if (raw.includes('{')) {
           updates.push(() => ((el as any)[name] = this.interpolate(raw, env)));
         } else {
@@ -364,6 +434,13 @@ export class UiInstance {
       }
 
       if (name === 'options' || name === 'size' || name === 'name' || name === 'min' || name === 'max' || name === 'step') {
+        continue;
+      }
+
+      // data-* / aria-* always land on the DOM, bindings included.
+      if (name.startsWith('data-') || name.startsWith('aria-')) {
+        if (raw.includes('{')) updates.push(() => el.setAttribute(name, this.interpolate(raw, env)));
+        else el.setAttribute(name, raw);
         continue;
       }
 
@@ -407,6 +484,9 @@ export class UiInstance {
       update() {
         for (const u of updates) u();
         for (const c of children) c.update();
+      },
+      dispose() {
+        for (const c of children) c.dispose?.();
       },
     };
   }
@@ -468,6 +548,11 @@ export class UiInstance {
       for (const row of rows.values()) for (const m of row.mounted) m.update();
     };
 
+    const dropRow = (row: Row) => {
+      for (const m of row.mounted) m.dispose?.();
+      for (const n of row.nodes) n.remove();
+    };
+
     return {
       update: () => {
         let value: any;
@@ -483,7 +568,7 @@ export class UiInstance {
           const sig = serialize(items);
           if (sig !== signature) {
             signature = sig;
-            for (const row of rows.values()) for (const n of row.nodes) n.remove();
+            for (const row of rows.values()) dropRow(row);
             rows = new Map();
             items.forEach((item, idx) => rows.set(String(idx), build(item, idx)));
           }
@@ -517,10 +602,15 @@ export class UiInstance {
           order = keys;
         }
         for (const [key, row] of rows) {
-          if (!next.has(key)) for (const n of row.nodes) n.remove();
+          if (!next.has(key)) dropRow(row);
         }
         rows = next;
         updateAll();
+      },
+      dispose: () => {
+        for (const row of rows.values()) dropRow(row);
+        rows = new Map();
+        anchor.remove();
       },
     };
   }
@@ -538,11 +628,21 @@ export class UiInstance {
         selEnd: typeof (target as HTMLTextAreaElement)?.selectionEnd === 'number' ? (target as HTMLTextAreaElement).selectionEnd : 0,
         x: (e as MouseEvent).clientX ?? 0,
         y: (e as MouseEvent).clientY ?? 0,
+        button: (e as MouseEvent).button ?? 0,
+        rect: (() => {
+          // Use the element the handler is bound to, not the inner SVG/text
+          // that happened to be under the pointer.
+          const r = el.getBoundingClientRect();
+          return r
+            ? { left: r.left, top: r.top, width: r.width, height: r.height, right: r.right, bottom: r.bottom }
+            : { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 };
+        })(),
         shift: (e as MouseEvent).shiftKey ?? false,
         ctrl: (e as MouseEvent).ctrlKey ?? false,
         meta: (e as MouseEvent).metaKey ?? false,
         alt: (e as MouseEvent).altKey ?? false,
         target,
+        dragSource: this.dragPayload,
         prevent: () => e.preventDefault(),
         stop: () => e.stopPropagation(),
       };
@@ -557,6 +657,9 @@ export class UiInstance {
     };
     el.addEventListener(type, handler);
     if (type === 'contextmenu') el.addEventListener('contextmenu', (e) => e.preventDefault());
+    // A drop handler implies this element accepts the drag: without a
+    // dragover preventDefault the browser refuses to fire `drop`.
+    if (type === 'drop') el.addEventListener('dragover', (e) => e.preventDefault());
   }
 
   private bindTwoWay(el: HTMLElement, build: WidgetBuild, varName: string, env: Env, updates: Array<() => void>) {

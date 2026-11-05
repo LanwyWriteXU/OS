@@ -36,6 +36,13 @@ npm run preview
 | --- |
 | ![IDE](docs/screenshots/ide.jpg) |
 
+## 图标系统
+
+所有应用图标共用一套网格：48×48 画布、12px 圆角、统一的深色底与 2.2px 白色线性图形，
+只用 20% 左右的应用色偏做区分。
+
+![应用图标](docs/screenshots/icons.png)
+
 ![编辑器的文件选择器](docs/screenshots/file-picker.jpg)
 
 ---
@@ -50,10 +57,34 @@ npm run preview
   预置 `/etc`、`/home/user/Documents`、示例 `.osl` / `.oml` 文件。
 - **终端**：管道 `|`、重定向 `>` `>>` `<`、`&&` `||` `;`、`$VAR` 展开、Tab 补全、
   历史持久化、ANSI SGR 配色，45+ 条命令，含 `fastfetch`。
-- **应用**：Files、Terminal、Editor、IDE、Notes、Calendar、Monitor、Settings、
-  Calculator、About —— 每个应用都是一对 `.oml` + `.osl` 文件。
+- **应用**：Files、Terminal、Editor、IDE、Notes、Tasks、Calendar、Clock、Preview、
+  Monitor、Logs、Settings、Calculator、About —— 每个应用都是一对 `.oml` + `.osl` 文件。
 - **多语言**：中文 / English 界面，词条集中在 `src/i18n`，设置面板可切换。
 - **桌面即文件系统**：`~/Desktop` 下的文件就是桌面图标，`.desktop` 是快捷方式。
+  图标可以拖到桌面任意位置，坐标写入 `~/.config/desktop-layout.json`；右键「整理图标」复位。
+- **运行窗口**：`Alt + F2`、开始菜单或桌面右键都能打开 Run，按应用名（中英文皆可）
+  或路径启动；带过滤建议，回车运行、Esc 关闭。
+- **应用注册表**：`/etc/apps.json` 保存应用列表与元数据（名称、图标、窗口大小、是否隐藏），
+  每个应用的目录里还有 `app.json`。改完调用 `sys.reloadApps()` 即可生效。
+- **系统源码全在文件管理器里**：每个内置应用以 `.oml` + `.osl` 放在
+  `/usr/share/apps/<app>/`，外壳自身在 `/usr/share/os/`（`shell.osl`、`shell.oml`、
+  `dialog.oml`、`menu.oml`），语言包在 `/usr/share/i18n/`，启动项在
+  `/usr/share/applications/`。文件管理器侧栏都有对应入口。
+- **任务栏 / Dock**：Windows 任务栏支持固定应用（右键开始菜单或任务栏按钮），
+  同一应用的多个窗口会合并成一个按钮并显示数量，点击在窗口之间循环切换；
+  固定按钮可以拖动排序。macOS Dock 同样可增删固定项，并把最小化窗口收进 Dock。
+- **多窗口**：同一个应用可以开任意多个窗口，开始菜单每次点击都会新建一个，
+  中键点击任务栏/Dock 图标也可以新建；窗口入口在任务栏/Dock 里按应用分组并显示数量。
+  鼠标悬停分组按钮会弹出窗口预览列表，点条目切换，预览里也能直接新建窗口。
+- **真实系统状态**：电量通过 `navigator.getBattery()` 读取，音量是可调的系统音量
+  （影响通知提示音），托盘面板里可以直接调节。
+- **壁纸**：8 套深色壁纸各自有浅色版本；还可以上传本地图片作为自定义壁纸。
+- **桌面网格**：右键「对齐到网格」是可切换的开关——开启时拖放会吸附到网格，
+  关闭后图标可以随便放；设置里也有同一个开关。
+- **语言包是数据**：中文词条在 `src/i18n/zh.json`，运行时写入
+  `/usr/share/i18n/*.json`；OSL 可以 `json.parse(fs.read(...))` 读取、修改后
+  `i18n.reload()` 立即生效。
+- **窗口动画**：最大化/还原有 0.2 秒过渡，最小化会缩小飞向任务栏按钮或 Dock 图标。
 - **模块化 OSL**：`import "lib/x.osl" as x` / `from "lib/x.osl" import y`。
 
 ---
@@ -75,12 +106,12 @@ src/
     overlay.ts      对话框与右键菜单（本身也是 OML）
   core/
     fs.ts           VirtualFS（Map + IndexedDB 镜像）
-    wm.ts           OWM 窗口管理器
+    wm.ts           OWM 窗口管理器（含最小化动画目标解析）
     kernel.ts       内核：启动 shell、托管应用、通知、快捷键
     settings.ts     主题 / 壁纸 / 强调色 / 用户
   system/
     shell.oml       整个桌面（菜单栏、图标、任务栏、Dock、通知、开始菜单）
-    shell.osl       桌面逻辑（时钟、启动应用、菜单、搜索）
+    shell.osl       桌面逻辑（时钟、图标拖拽、固定项、托盘、菜单）
     dialog.oml      通用对话框
     menu.oml        右键菜单
   apps/<app>/     每个应用一对 .oml + .osl
@@ -345,6 +376,7 @@ screenfetch`
 | `Alt + F4` | 关闭当前窗口 |
 | `Ctrl + Alt + T` | 新终端 |
 | `Ctrl + Alt + I` | 打开 IDE |
+| `Ctrl + L` | 文件管理器：编辑路径 |
 | `Ctrl + Space` | 开始菜单 / Spotlight |
 | `Ctrl + W` | 关闭当前窗口 |
 | `Ctrl + S` | 编辑器保存 |

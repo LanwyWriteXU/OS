@@ -1,5 +1,5 @@
 <Window title="OS Shell" icon="app-about">
-  <VBox class="shell wall-{wallpaper}" oncontextmenu="desktopMenu(event)">
+  <VBox class="shell wall-{wallpaper}" style="{customWall != '' ? 'background-image:url(' + customWall + ');background-size:cover;background-position:center' : ''}" oncontextmenu="desktopMenu(event)" onmousemove="dragMove(event)" onmouseup="dragEnd()">
 
     <!-- macOS menu bar -->
     <HBox class="menubar" if="{style == 'mac'}">
@@ -17,8 +17,8 @@
     <VBox class="workarea" onclick="closeMenus()">
       <VBox class="desk-icons">
         <For each="deskIcons" as="it" key="it.path">
-          <Button class="desk-icon {deskSel == it.path ? 'sel' : ''}" onclick="selectDesktop(it.path)" ondblclick="openItem(it)" oncontextmenu="deskIconMenu(it, event)">
-            <Icon name="{it.icon}" size="42"/>
+          <Button class="desk-icon {deskSel == it.path ? 'sel' : ''}" style="left:{posX(it.path)}px;top:{posY(it.path)}px" onmousedown="dragStart(it, event)" onclick="selectDesktop(it.path)" ondblclick="openItem(it)" oncontextmenu="deskIconMenu(it, event)">
+            <Icon name="{it.icon}" size="{iconSize}"/>
             <Label text="{it.name}"/>
           </Button>
         </For>
@@ -40,7 +40,7 @@
     </VBox>
 
     <!-- start menu: applications on the left, places and recent files on the right -->
-    <VBox class="start-menu two-col {style == 'mac' ? 'mac' : ''}" if="{startOpen}">
+    <VBox class="start-menu two-col {style == 'mac' ? 'mac' : ''} {startClosing ? 'closing' : ''}" if="{startOpen}">
       <HBox class="sm-cols">
         <VBox class="sm-left">
           <HBox class="sm-head">
@@ -49,7 +49,7 @@
           </HBox>
           <Scroll class="sm-apps" flex="1">
             <For each="filteredApps()" as="a" key="a.id">
-              <Button class="sm-app" onclick="launch(a.id)">
+              <Button class="sm-app" onclick="launch(a.id)" oncontextmenu="appMenu(a, event)">
                 <Icon name="{a.icon}" size="22"/>
                 <Label class="sm-app-name" text="{a.name}"/>
               </Button>
@@ -71,6 +71,11 @@
         </VBox>
 
         <VBox class="sm-right">
+          <Button class="sm-link" onclick="openRun()">
+            <Icon name="command" size="16"/>
+            <Label text="{t('Run…')}" flex="1"/>
+          </Button>
+          <Divider/>
           <Label class="sm-h" text="Places"/>
           <VBox class="sm-links">
             <For each="places" as="p" key="p.path">
@@ -112,30 +117,85 @@
 
     <!-- Windows taskbar -->
     <HBox class="taskbar" if="{style == 'win'}">
+      <Button class="tb-start" onclick="toggleStart()" title="Start">
+        <Icon name="start" size="20"/>
+      </Button>
       <HBox class="tb-center">
-        <Button class="tb-start" onclick="toggleStart()" title="Start">
-          <Icon name="app-about" size="26"/>
-        </Button>
-        <For each="running" as="w" key="w.id">
-          <Button class="tb-btn {w.active ? 'active' : ''} {w.minimized ? 'minimized' : ''}" onclick="taskClick(w.id)" title="{w.title}">
-            <Icon name="{w.icon}" size="24"/>
+        <For each="taskItems()" as="t" key="t.key">
+          <Button class="tb-btn {t.state == 'active' ? 'active' : ''} {t.state == 'min' ? 'minimized' : ''} {t.state == 'pinned' ? 'pinned' : ''}" data-win="{t.winId}" data-app="{t.appId}" draggable="{t.movable}" drag-data="{t.appId}" ondrop="taskDrop(t, event)" onclick="taskItemClick(t)" onauxclick="taskAux(t, event)" onmouseenter="previewShow(t, event)" onmouseleave="previewHide()" oncontextmenu="taskItemMenu(t, event)" title="{t.name}">
+            <Icon name="{t.icon}" size="24"/>
+            <Label class="tb-count" text="{t.count}" if="{t.count > 1}"/>
+            <Div class="tb-dot" if="{t.state != 'pinned'}"/>
           </Button>
         </For>
       </HBox>
       <HBox class="tray">
-        <Button class="tray-btn" onclick="trayMenu(event)"><Icon name="wifi" size="16"/><Icon name="volume" size="16"/><Icon name="battery" size="16"/></Button>
+        <Button class="tray-btn" onclick="toggleTray()" title="Network, sound and battery">
+          <Icon name="wifi" size="16"/>
+          <Icon name="volume" size="16"/>
+          <Icon name="battery" size="16"/>
+        </Button>
         <VBox class="tray-clock" onclick="openCalendar()"><Label text="{clock}"/><Label text="{dateStr}"/></VBox>
         <Div class="tray-showdesk" onclick="showDesktop()" title="Show desktop"/>
       </HBox>
     </HBox>
 
+    <!-- tray panel: real battery / network state and a working volume slider -->
+    <VBox class="tray-panel" if="{trayOpen and style == 'win'}">
+      <Label class="tray-h" text="Network"/>
+      <HBox class="tray-row">
+        <Icon name="wifi" size="16"/>
+        <Label flex="1" text="{wifiNote()}"/>
+      </HBox>
+      <Divider/>
+      <Label class="tray-h" text="Sound"/>
+      <HBox class="tray-row">
+        <IconButton icon="volume" title="Mute" onclick="toggleMute()"/>
+        <Slider bind="volume" min="0" max="100" step="1" flex="1" oninput="applyVolume()"/>
+        <Label class="tray-val" text="{muted ? t('Muted') : str(volume) + '%'}"/>
+      </HBox>
+      <Divider/>
+      <Label class="tray-h" text="Battery"/>
+      <HBox class="tray-row">
+        <Icon name="battery" size="16"/>
+        <Label flex="1" text="{battery.get('supported') ? str(battery.get('level')) + '%' : t('Unknown')}"/>
+        <Label class="tray-note" text="{batteryNote()}"/>
+      </HBox>
+      <Divider/>
+      <HBox class="tray-actions">
+        <Button icon="settings" text="All settings" onclick="traySettings()"/>
+      </HBox>
+    </VBox>
+
+    <!-- grouped-window preview, like the Windows taskbar -->
+    <VBox class="win-preview" if="{hoverApp != ''}" style="left:{previewX}px" onmouseenter="previewHold()" onmouseleave="previewLeave()">
+      <HBox class="wp-head">
+        <Icon name="apps" size="16"/>
+        <Label text="{findAppName(hoverApp)}"/>
+        <Label class="wp-count" text="{len(previewItems())}"/>
+        <IconButton icon="plus" title="New window" onclick="previewNew()"/>
+      </HBox>
+      <For each="previewItems()" as="w" key="w.id">
+        <Button class="wp-row {w.active ? 'on' : ''}" onclick="previewPick(w.id)">
+          <Icon name="{w.icon}" size="16"/>
+          <Label class="wp-title" text="{w.title}" flex="1"/>
+          <Label class="wp-idx" text="{'#' + str(w.index)}"/>
+          <Label class="wp-min" text="{t('Minimized')}" if="{w.minimized}"/>
+        </Button>
+      </For>
+      <Button class="wp-row" if="{len(previewItems()) == 0}" onclick="previewNew()">
+        <Icon name="play" size="16"/>
+        <Label class="wp-title" text="{t('Click to launch')}" flex="1"/>
+      </Button>
+    </VBox>
+
     <!-- macOS dock -->
     <HBox class="dock-wrap" if="{style == 'mac'}">
       <HBox class="dock">
-        <For each="apps" as="a" key="a.id">
-          <Button class="dock-app" onclick="launch(a.id)" title="{a.name}">
-            <Icon name="{a.icon}" size="44"/>
-            <Div class="dot" if="{isRunning(a.id)}"/>
+        <For each="dockItems()" as="d" key="d.key">
+          <Button class="dock-app {d.kind == 'min' ? 'dock-min' : ''}" data-win="{d.winId}" data-app="{d.appId}" onclick="dockClick(d)" onauxclick="taskAux(d, event)" onmouseenter="previewShow(d, event)" onmouseleave="previewHide()" oncontextmenu="dockMenu(d, event)" title="{d.name}">
+            <Icon name="{d.icon}" size="44"/>
+            <Div class="dot" if="{d.running}"/>
           </Button>
         </For>
         <Div class="dock-sep"/>

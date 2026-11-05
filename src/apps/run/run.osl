@@ -1,0 +1,123 @@
+# run.osl — a small "Run" dialog: type an application name or a path.
+
+let query = ""
+let hits = []
+let sel = ""
+let index = 0
+
+let places = [
+    {"name": t("Home"), "path": "/home/user", "icon": "home"},
+    {"name": t("Desktop"), "path": "/home/user/Desktop", "icon": "monitor"},
+    {"name": t("Documents"), "path": "/home/user/Documents", "icon": "file-text"},
+    {"name": t("Downloads"), "path": "/home/user/Downloads", "icon": "download"},
+    {"name": t("Projects"), "path": "/home/user/Projects", "icon": "code"},
+    {"name": t("Applications"), "path": "/usr/share/apps", "icon": "apps"},
+    {"name": t("System sources"), "path": "/usr/share/os", "icon": "code"},
+    {"name": t("Translations"), "path": "/usr/share/i18n", "icon": "book"},
+]
+
+fn rebuild():
+    hits = []
+    let q = query.strip().lower()
+    for a in sys.apps():
+        if len(hits) >= 7:
+            break
+        if q == "" or a.name.lower().find(q) >= 0 or a.id.lower().find(q) >= 0:
+            hits.append({
+                "key": "app:" + a.id,
+                "kind": t("Application"),
+                "name": a.name,
+                "detail": a.id,
+                "icon": a.icon,
+                "id": a.id,
+                "path": "",
+            })
+    for p in places:
+        if len(hits) >= 7:
+            break
+        if q == "" or p.get("name").lower().find(q) >= 0 or p.get("path").lower().find(q) >= 0:
+            hits.append({
+                "key": "path:" + p.get("path"),
+                "kind": t("Folder"),
+                "name": p.get("name"),
+                "detail": p.get("path"),
+                "icon": p.get("icon"),
+                "id": "",
+                "path": p.get("path"),
+            })
+    if q.startswith("/") and fs.exists(query.strip()):
+        hits.insert(0, {
+            "key": "path:" + query.strip(),
+            "kind": t("Folder"),
+            "name": paths.basename(query.strip()),
+            "detail": query.strip(),
+            "icon": "folder",
+            "id": "",
+            "path": query.strip(),
+        })
+    sel = ""
+    if len(hits) > 0:
+        sel = hits[0].get("key")
+    refresh()
+
+fn pick(h):
+    if h.get("id") != "":
+        sys.open(h.get("id"))
+    else:
+        sys.openPath(h.get("path"))
+    win.close()
+
+fn run():
+    let text = query.strip()
+    if text == "":
+        return
+    let low = text.lower()
+    for a in sys.apps():
+        if a.id.lower() == low or a.name.lower() == low:
+            sys.open(a.id)
+            win.close()
+            return
+    let target = text
+    if not target.startswith("/"):
+        target = paths.join("/home/user", target)
+    if fs.exists(target):
+        sys.openPath(target)
+        win.close()
+        return
+    for h in hits:
+        if h.get("name").lower() == low:
+            pick(h)
+            return
+    if len(hits) > 0:
+        pick(hits[0])
+        return
+    ui.toast(t("Cannot find: ") + text, "alert")
+
+fn move(delta):
+    if len(hits) == 0:
+        return
+    let i = 0
+    let idx = 0
+    for h in hits:
+        if h.get("key") == sel:
+            idx = i
+        i += 1
+    idx = (idx + delta + len(hits)) % len(hits)
+    sel = hits[idx].get("key")
+    refresh()
+
+fn onKey(e):
+    if e.key == "Enter":
+        e.prevent()
+        run()
+    elif e.key == "Escape":
+        e.prevent()
+        win.close()
+    elif e.key == "ArrowDown":
+        e.prevent()
+        move(1)
+    elif e.key == "ArrowUp":
+        e.prevent()
+        move(-1)
+
+rebuild()

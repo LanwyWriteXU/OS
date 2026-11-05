@@ -21,6 +21,7 @@
 | `eval(src)` | 在**全局作用域**求值一段表达式字符串 |
 | `sleep(ms)` | 空实现（主线程不可阻塞），保留是为了兼容旧脚本 |
 | `every(ms, fn)` | 定时执行，窗口关闭时自动清理 |
+| `after(ms, fn)` | 一次性延迟执行（不随窗口关闭清理） |
 | `notify(title, body[, icon])` | 弹出系统通知 |
 | `open(path)` | 打开文件（等同 `sys.openPath`） |
 | `uuid()` | 随机 id |
@@ -45,6 +46,7 @@
 | `size(path)` `count(path)` `sizeText(bytes)` | 容量统计 |
 | `cwd()` `home()` `normalize(path)` | 路径环境 |
 | `readJson` `writeJson` | 与字典互转 |
+| `search(root, query[, limit])` | 递归按文件名搜索，返回文件节点列表 |
 | `touch(path)` | 创建空文件或刷新 mtime |
 
 `fs.write` 会自动创建父目录；`fs.remove` 递归删除。
@@ -71,6 +73,16 @@
 | `recent()` `touchRecent(path)` | 最近文件 |
 | `lock()` `power(mode)` `factoryReset()` | 电源与重置 |
 | `platform()` `arch()` | 平台描述 |
+| `battery()` | 真实电量：`{ supported, level, charging, chargingTime, dischargingTime }` |
+| `network()` | 是否在线（`navigator.onLine`） |
+| `volume()` `setVolume(n)` `toggleMute()` | 系统音量 0–100 |
+| `viewport()` | 工作区尺寸 `{ width, height }` |
+| `reloadApps()` | 重新读取 `/etc/apps.json` 并刷新界面 |
+| `runScript(source[, path])` | 隔离解释器运行 OSL，返回 `{ ok, output, error }` |
+| `log(level, message)` | 写入系统日志（level：`info` `app` `notice` `error` `system`） |
+| `logs([limit])` | 读取日志，返回 `{ id, time, level, message }` 列表 |
+| `clearLogs()` | 清空日志环形缓冲 |
+| `metrics()` | 快照：`windows apps files bytes logs uptime` |
 
 ## ui — 界面交互
 
@@ -82,13 +94,16 @@
 | `prompt(title, value, onOk)` | 输入框 |
 | `toast(message[, icon])` | 通知气泡 |
 | `menu(items, onPick[, x, y])` | 右键菜单。`items` 是字典列表，字段：`label icon id sep danger kbd` |
+| `chooseImage(onPick)` | 原生图片选择器，`onPick(dataUrl)` 收到图片的 data URL |
 
 菜单回调收到的是**同一个字典**，可以用 `it.get("id")` 判断选项。
 
 ## win — 当前窗口
 
 `setTitle(title)` `close()` `minimize()` `maximize()` `restore()`
-`toggleMax()` `setSize(w, h)` `isMaximized()` `id()`
+`toggleMax()` `setSize(w, h)` `move(x, y)` `center()`
+`toggleFullscreen()` `isFullscreen()`
+`isMaximized()` `id()`
 
 ## time — 时间
 
@@ -111,7 +126,22 @@
 
 ## json
 
-`parse(text)` → 字典/列表；`stringify(value[, pretty])` → 文本。
+`parse(text)` → 字典/列表；`stringify(value[, pretty])` → 文本。`JSON` 是同一个
+命名空间的别名，两种写法都可以。
+
+```osl
+let cfg = json.parse(fs.read("/usr/share/i18n/zh.json"))
+print(cfg.get("Files"))
+fs.write("/tmp/copy.json", JSON.stringify(cfg, True))
+```
+
+## i18n
+
+| 方法 | 说明 |
+| --- | --- |
+| `catalog([lang])` | 读取语言包并解析成字典（默认当前语言） |
+| `reload()` | 重新读取 `/usr/share/i18n/*.json` 并重绘所有窗口 |
+| `langs()` | 支持的语言码列表 |
 
 ## store / clip / console
 

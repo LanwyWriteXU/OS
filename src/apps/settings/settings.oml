@@ -18,7 +18,54 @@
             <For each="wallpapers" as="w">
               <Button class="wall-swatch wall-{w} {wallpaper == w ? 'on' : ''}" onclick="setWall(w)"/>
             </For>
+            <Button class="wall-swatch {wallpaper == 'custom' ? 'on' : ''}" if="{wallpaperPath != ''}" style="background-image:url({wallThumb});background-size:cover;background-position:center" onclick="setWall('custom')"/>
           </Grid>
+          <HBox class="wall-actions">
+            <Button icon="image" text="Upload image…" onclick="uploadWall()"/>
+            <Button icon="trash" text="Reset" if="{wallpaper == 'custom'}" onclick="clearWall()"/>
+            <Label class="set-desc" text="{t('Light and dark themes use different wallpapers.')}"/>
+          </HBox>
+        </VBox>
+
+        <VBox class="ui-card set-card">
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Desktop icons"/>
+              <Label class="set-desc" text="Size of the icons on the wallpaper."/>
+            </VBox>
+            <HBox class="seg">
+              <For each="iconSizes" as="sz" key="sz.name">
+                <Button text="{t(sz.name)}" variant="ghost" class="{deskIconSize == sz.value ? 'on' : ''}" onclick="setIconSize(sz.value)"/>
+              </For>
+            </HBox>
+          </HBox>
+          <Divider/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Align icons to grid"/>
+              <Label class="set-desc" text="Snap icons to the grid; turn off to place them freely."/>
+            </VBox>
+            <Switch bind="deskSnap" onchange="applyDeskSnap()"/>
+          </HBox>
+          <Divider/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Taskbar position"/>
+              <Label class="set-desc" text="Dock the taskbar at the bottom or the top edge."/>
+            </VBox>
+            <HBox class="seg">
+              <Button text="Bottom" variant="ghost" class="{!taskbarTop ? 'on' : ''}" onclick="setTaskbar(False)"/>
+              <Button text="Top" variant="ghost" class="{taskbarTop ? 'on' : ''}" onclick="setTaskbar(True)"/>
+            </HBox>
+          </HBox>
+          <Divider/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Transparency"/>
+              <Label class="set-desc" text="Frosted glass on menus, the taskbar and dialogs."/>
+            </VBox>
+            <Switch bind="transparency" onchange="applyTransparency()"/>
+          </HBox>
         </VBox>
 
         <VBox class="ui-card set-card">
@@ -77,14 +124,6 @@
             </VBox>
             <Switch bind="animations" onchange="applyAnimations()"/>
           </HBox>
-          <Divider/>
-          <HBox class="set-row">
-            <VBox class="set-info" flex="1">
-              <Label class="set-name" text="24-hour clock"/>
-              <Label class="set-desc" text="Show the taskbar clock in 24-hour format."/>
-            </VBox>
-            <Switch bind="clock24" onchange="applyClock()"/>
-          </HBox>
         </VBox>
       </VBox>
 
@@ -108,6 +147,79 @@
           </HBox>
         </VBox>
         <VBox class="ui-card set-card">
+          <Label class="set-name" text="Clock"/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="24-hour clock"/>
+              <Label class="set-desc" text="Show the taskbar clock in 24-hour format."/>
+            </VBox>
+            <Switch bind="clock24" onchange="applyClock()"/>
+          </HBox>
+          <Divider/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Show seconds"/>
+              <Label class="set-desc" text="Include seconds in the taskbar clock."/>
+            </VBox>
+            <Switch bind="clockSeconds" onchange="applyClockSeconds()"/>
+          </HBox>
+          <Divider/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Week starts on"/>
+              <Label class="set-desc" text="First column of the calendar."/>
+            </VBox>
+            <HBox class="seg">
+              <Button text="Sunday" variant="ghost" class="{weekStart == 'sun' ? 'on' : ''}" onclick="setWeekStart('sun')"/>
+              <Button text="Monday" variant="ghost" class="{weekStart == 'mon' ? 'on' : ''}" onclick="setWeekStart('mon')"/>
+            </HBox>
+          </HBox>
+        </VBox>
+
+        <VBox class="ui-card set-card">
+          <Label class="set-name" text="Files and text"/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Show hidden files"/>
+              <Label class="set-desc" text="Display entries whose name starts with a dot."/>
+            </VBox>
+            <Switch bind="showHidden" onchange="applyShowHidden()"/>
+          </HBox>
+          <Divider/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Terminal text size"/>
+              <Label class="set-desc" text="Font size used by the terminal."/>
+            </VBox>
+            <HBox class="seg">
+              <For each="textSizes" as="ts" key="ts.name">
+                <Button text="{ts.name}" variant="ghost" class="{termFont == ts.value ? 'on' : ''}" onclick="setTermFont(ts.value)"/>
+              </For>
+            </HBox>
+          </HBox>
+          <Divider/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Editor text size"/>
+              <Label class="set-desc" text="Font size used by the IDE and the editor."/>
+            </VBox>
+            <HBox class="seg">
+              <For each="textSizes" as="ts" key="ts.name">
+                <Button text="{ts.name}" variant="ghost" class="{codeFont == ts.value ? 'on' : ''}" onclick="setCodeFont(ts.value)"/>
+              </For>
+            </HBox>
+          </HBox>
+          <Divider/>
+          <HBox class="set-row">
+            <VBox class="set-info" flex="1">
+              <Label class="set-name" text="Notifications"/>
+              <Label class="set-desc" text="Show desktop notifications for system events."/>
+            </VBox>
+            <Switch bind="notifications" onchange="applyNotifications()"/>
+          </HBox>
+        </VBox>
+
+        <VBox class="ui-card set-card">
           <Label class="set-name" text="Developer"/>
           <Label class="set-desc" text="OSL and OML are interpreted at runtime. Open the welcome guide to read the language reference."/>
           <HBox gap="8">
@@ -123,7 +235,7 @@
           <HBox class="set-row">
             <VBox class="set-info" flex="1">
               <Label class="set-name" text="osvfs (IndexedDB)"/>
-              <Label class="set-desc" text="{t('{0} files · {1} used of 8 MB', fileCount, sizeText)}"/>
+              <Label class="set-desc" text="{t('{0} files · {1} used of {2}', fileCount, sizeText, quotaText)}"/>
             </VBox>
             <Label class="ui-badge" text="{percent}%"/>
           </HBox>

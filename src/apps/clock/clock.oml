@@ -1,0 +1,37 @@
+<Window title="Clock" icon="app-clock">
+  <VBox class="clock">
+    <HBox class="clock-top">
+      <VBox class="clock-face">
+        <For each="ticks" as="tk" key="tk.key">
+          <Div class="clk-tick" style="transform: rotate({tk.deg}deg)"/>
+        </For>
+        <Div class="clk-hand hour" style="transform: rotate({hourDeg}deg)"/>
+        <Div class="clk-hand minute" style="transform: rotate({minDeg}deg)"/>
+        <Div class="clk-hand second" style="transform: rotate({secDeg}deg)"/>
+        <Div class="clk-pin"/>
+      </VBox>
+
+      <VBox class="clock-side" flex="1">
+        <Label class="clock-time" text="{timeText}"/>
+        <Label class="clock-date" text="{dateText}"/>
+
+        <VBox class="ui-card clock-sw">
+          <HBox class="clock-sw-head">
+            <Label class="set-name" text="Stopwatch" flex="1"/>
+            <Label class="ui-badge" text="{swRunning ? t('Running') : t('Stopped')}"/>
+          </HBox>
+          <Label class="clock-sw-time" text="{swText}"/>
+          <HBox class="clock-sw-actions">
+            <Button icon="play" text="{swRunning ? t('Stop') : t('Start')}" variant="primary" onclick="toggleStop()"/>
+            <Button icon="refresh" text="Reset" onclick="resetStop()"/>
+          </HBox>
+        </VBox>
+
+        <HBox class="clock-meta">
+          <Icon name="calendar" size="14"/>
+          <Label class="set-desc" text="24-hour local time · updates 5×/second"/>
+        </HBox>
+      </VBox>
+    </HBox>
+  </VBox>
+</Window>

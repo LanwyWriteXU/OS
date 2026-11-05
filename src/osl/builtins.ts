@@ -119,6 +119,30 @@ export function createBuiltins(interp: Interpreter, host: Host): Record<string, 
       else vfs.write(path, '');
       return true;
     },
+    /** Recursive filename search under `root`. Returns file nodes. */
+    search: (root: any, query: any, limit: any = 50) => {
+      const base = resolve(root);
+      const needle = String(query ?? '').toLowerCase();
+      const max = Math.max(1, Number(limit) || 50);
+      const out: any[] = [];
+      const walk = (dir: string) => {
+        if (out.length >= max) return;
+        let items: FsNode[];
+        try {
+          items = vfs.list(dir);
+        } catch {
+          return;
+        }
+        for (const n of items) {
+          if (out.length >= max) return;
+          if (n.name.startsWith('.')) continue;
+          if (n.type === 'dir') walk(n.path);
+          else if (!needle || n.name.toLowerCase().includes(needle)) out.push(fsNodeToMap(n));
+        }
+      };
+      walk(base);
+      return out;
+    },
   };
 
   const paths = {
@@ -244,6 +268,72 @@ export function createBuiltins(interp: Interpreter, host: Host): Record<string, 
       m.set('error', res.error);
       return m;
     },
+    log: (level: any, message: any) => {
+      host.kernel.log(String(level ?? 'info'), String(message ?? ''));
+      return true;
+    },
+    logs: (limit: any = 200) => host.kernel.logs(Number(limit)).map((e) => {
+      const m = new Map<string, any>();
+      m.set('id', e.id);
+      m.set('time', e.time);
+      m.set('level', e.level);
+      m.set('message', e.message);
+      return m;
+    }),
+    clearLogs: () => {
+      host.kernel.clearLogs();
+      return true;
+    },
+    /** Live battery state: { supported, level, charging, chargingTime, dischargingTime }. */
+    battery: () => {
+      const b = host.kernel.battery();
+      const m = new Map<string, any>();
+      m.set('supported', b.supported);
+      m.set('level', b.level);
+      m.set('charging', b.charging);
+      m.set('chargingTime', b.chargingTime);
+      m.set('dischargingTime', b.dischargingTime);
+      return m;
+    },
+    network: () => host.kernel.network(),
+    storage: () => {
+      const st = host.kernel.storage();
+      const m = new Map<string, any>();
+      m.set('supported', st.supported);
+      m.set('usage', st.usage);
+      m.set('quota', st.quota);
+      return m;
+    },
+    reloadApps: () => {
+      host.kernel.reloadApps();
+      return true;
+    },
+    volume: () => host.kernel.volume(),
+    setVolume: (level: any) => {
+      host.kernel.setVolume(Number(level));
+      return true;
+    },
+    toggleMute: () => host.kernel.toggleMute(),
+    /** Size of the window layer, useful for laying out desktop icons. */
+    viewport: () => {
+      const el = document.querySelector('#window-layer') as HTMLElement | null;
+      const r = el?.getBoundingClientRect();
+      const m = new Map<string, any>();
+      m.set('width', Math.round(r?.width ?? window.innerWidth));
+      m.set('height', Math.round(r?.height ?? window.innerHeight));
+      return m;
+    },
+    /** Snapshot of window / storage / log counters. */
+    metrics: () => {
+      const m = new Map<string, any>();
+      m.set('windows', host.kernel.windows().length);
+      m.set('apps', host.kernel.apps().length);
+      m.set('files', vfs.countFiles('/'));
+      m.set('bytes', vfs.sizeOf('/'));
+      m.set('logs', host.kernel.logs(1).length === 0 ? 0 : host.kernel.logs(1000).length);
+      m.set('uptime', host.kernel.uptime());
+      return m;
+    },
   };
 
   const ui = {
@@ -287,6 +377,12 @@ export function createBuiltins(interp: Interpreter, host: Host): Record<string, 
       );
       return true;
     },
+    chooseImage: (onPick: any) => {
+      host.ui.chooseImage((dataUrl: string) => {
+        if (isCallable(onPick)) interp.callFunction(onPick, [dataUrl]);
+      });
+      return true;
+    },
   };
 
   const win = {
@@ -318,6 +414,19 @@ export function createBuiltins(interp: Interpreter, host: Host): Record<string, 
       host.window.setSize(Number(w), Number(h));
       return true;
     },
+    move: (x: any, y: any) => {
+      host.window.move(Number(x), Number(y));
+      return true;
+    },
+    center: () => {
+      host.window.center();
+      return true;
+    },
+    toggleFullscreen: () => {
+      host.window.toggleFullscreen();
+      return true;
+    },
+    isFullscreen: () => host.window.isFullscreen(),
     isMaximized: () => host.window.isMaximized(),
     id: () => host.window.id,
   };
@@ -399,6 +508,26 @@ export function createBuiltins(interp: Interpreter, host: Host): Record<string, 
     stringify: (v: any, pretty: any = false) => JSON.stringify(toJson(v), null, pretty ? 2 : 0),
   };
 
+  const i18n = {
+    /** Re-reads /usr/share/i18n/*.json and repaints every window. */
+    reload: () => {
+      host.kernel.reloadI18n();
+      return true;
+    },
+    /** Parsed catalogue for a language (defaults to the active one). */
+    catalog: (lang: any = null) => {
+      const code = String(lang ?? host.settings.get('lang'));
+      const p = resolve(`/usr/share/i18n/${code}.json`);
+      if (!vfs.exists(p)) return new Map<string, any>();
+      try {
+        return fromJson(JSON.parse(vfs.read(p)));
+      } catch (e) {
+        throw new Error(`invalid i18n catalogue: ${(e as Error).message}`);
+      }
+    },
+    langs: () => ['en', 'zh'],
+  };
+
   const store = {
     get: (key: any, def: any = null) => {
       try {
@@ -445,6 +574,8 @@ export function createBuiltins(interp: Interpreter, host: Host): Record<string, 
     time: new NativeObject('time', time),
     math: new NativeObject('math', math),
     json: new NativeObject('json', json),
+    JSON: new NativeObject('JSON', json),
+    i18n: new NativeObject('i18n', i18n),
     store: new NativeObject('store', store),
     clip: new NativeObject('clip', clip),
     console: new NativeObject('console', {
@@ -553,6 +684,18 @@ export function createBuiltins(interp: Interpreter, host: Host): Record<string, 
     sleep: (_ms: any) => null,
     every: (ms: any, fn: any) => {
       host.every(Number(ms), fn);
+      return true;
+    },
+    /** One-shot timer: `after(180, hidePreview)`. */
+    after: (ms: any, fn: any) => {
+      setTimeout(() => {
+        if (!isCallable(fn)) return;
+        try {
+          interp.callFunction(fn, []);
+        } catch (e) {
+          console.error('[OSL:after]', e);
+        }
+      }, Number(ms));
       return true;
     },
     notify: (title: any, body: any, icon: any = 'info') => {

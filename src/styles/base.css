@@ -70,15 +70,17 @@ button, input, textarea, select { font-family: inherit; font-size: inherit; colo
 ::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
 
 /* scrollbars */
-::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar { width: 12px; height: 12px; }
 ::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text) 18%, transparent);
+  background: color-mix(in srgb, var(--text) 32%, transparent);
   border-radius: 10px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
-::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--text) 30%, transparent); background-clip: padding-box; border: 3px solid transparent; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--text) 48%, transparent); background-clip: padding-box; border: 3px solid transparent; }
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text) 32%, transparent) transparent; }
 
 /* ============================================================
    Widgets
@@ -337,3 +339,87 @@ button, input, textarea, select { font-family: inherit; font-size: inherit; colo
     radial-gradient(760px 560px at 78% 18%, rgba(45, 212, 191, 0.18), transparent 60%),
     linear-gradient(160deg, #08170f 0%, #07130d 55%, #040a07 100%);
 }
+
+/* ---------------- system preferences ---------------- */
+body[data-taskbar="top"] .taskbar {
+  order: -1;
+  border-top: 0;
+  border-bottom: 1px solid var(--border);
+}
+body[data-taskbar="top"] .start-menu {
+  bottom: auto;
+  top: 56px;
+}
+body[data-taskbar="top"] .start-menu.mac { top: 36px; }
+body[data-taskbar="top"] .notif-layer { bottom: 12px; }
+
+.no-blur .taskbar,
+.no-blur .menubar,
+.no-blur .start-menu,
+.no-blur .mb-menu,
+.no-blur .ctx-menu,
+.no-blur .notif,
+.no-blur .dock,
+.no-blur .ide-palette,
+.no-blur .modal-layer,
+.no-blur .lock-veil {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: var(--surface);
+}
+.no-blur .modal-layer { background: rgba(0, 0, 0, 0.45); }
+.no-blur .mb-menu, .no-blur .ctx-menu { background: var(--surface); }
+.no-blur .ide-palette { background: var(--surface); }
+
+/* ---------------- light-theme wallpapers ----------------
+   The dark backgrounds turn into pale paper-like gradients so light mode
+   actually looks like a different desktop instead of a washed-out dark one. */
+body[data-theme="light"] .wall-aurora {
+  background:
+    radial-gradient(1100px 620px at 22% 12%, rgba(125, 211, 252, 0.55), transparent 62%),
+    radial-gradient(900px 700px at 82% 24%, rgba(196, 181, 253, 0.5), transparent 64%),
+    radial-gradient(900px 700px at 62% 92%, rgba(165, 243, 252, 0.45), transparent 60%),
+    linear-gradient(160deg, #f4fbff 0%, #eef4ff 48%, #e8eefb 100%);
+}
+body[data-theme="light"] .wall-dune {
+  background:
+    radial-gradient(1000px 620px at 70% 18%, rgba(253, 230, 200, 0.75), transparent 62%),
+    radial-gradient(900px 640px at 20% 80%, rgba(232, 213, 183, 0.65), transparent 64%),
+    linear-gradient(160deg, #fbf6ec 0%, #f5ecdc 55%, #eee2cd 100%);
+}
+body[data-theme="light"] .wall-void {
+  background:
+    radial-gradient(900px 620px at 30% 20%, rgba(226, 232, 240, 0.9), transparent 62%),
+    linear-gradient(160deg, #f8fafc 0%, #eef2f7 55%, #e5eaf1 100%);
+}
+body[data-theme="light"] .wall-mint {
+  background:
+    radial-gradient(900px 600px at 24% 78%, rgba(167, 243, 208, 0.6), transparent 62%),
+    radial-gradient(760px 560px at 78% 18%, rgba(204, 251, 241, 0.6), transparent 60%),
+    linear-gradient(160deg, #f2fdf8 0%, #e8faf1 55%, #ddf4e9 100%);
+}
+body[data-theme="light"] .wall-sunset {
+  background:
+    radial-gradient(900px 620px at 18% 24%, rgba(254, 215, 170, 0.75), transparent 62%),
+    radial-gradient(860px 620px at 82% 72%, rgba(251, 207, 232, 0.65), transparent 60%),
+    linear-gradient(160deg, #fff7ed 0%, #fdeee6 52%, #f8e3e6 100%);
+}
+body[data-theme="light"] .wall-graphite {
+  background:
+    radial-gradient(900px 620px at 26% 16%, rgba(226, 232, 240, 0.85), transparent 64%),
+    linear-gradient(160deg, #f4f6f9 0%, #eaedf3 55%, #dfe4ec 100%);
+}
+body[data-theme="light"] .wall-nebula {
+  background:
+    radial-gradient(900px 640px at 18% 22%, rgba(221, 214, 254, 0.7), transparent 62%),
+    radial-gradient(760px 560px at 82% 74%, rgba(251, 207, 232, 0.55), transparent 60%),
+    linear-gradient(160deg, #fbf8ff 0%, #f3eefe 55%, #ece5fb 100%);
+}
+body[data-theme="light"] .wall-forest {
+  background:
+    radial-gradient(880px 600px at 24% 78%, rgba(187, 247, 208, 0.6), transparent 62%),
+    radial-gradient(760px 560px at 78% 18%, rgba(204, 251, 241, 0.55), transparent 60%),
+    linear-gradient(160deg, #f5fdf6 0%, #ecf9ef 55%, #e2f4e7 100%);
+}
+.wall-custom { background-color: #0b1220; background-size: cover; background-position: center; }
+body[data-theme="light"] .wall-custom { background-color: #eef2f9; }

@@ -1,6 +1,9 @@
 # ide.osl — a small IDE: explorer, tabs, syntax-highlighted editor and a run panel.
 
 let root = "/home/user/Projects"
+let openArg = args.get("path")
+if openArg != None and openArg != "":
+    root = paths.dirname(openArg)
 let sidebarOpen = True
 let panelOpen = True
 let tree = []
@@ -18,6 +21,7 @@ let paletteQuery = ""
 let paletteHits = []
 let menuTarget = ""
 let savedText = ""
+let showHidden = False
 
 # ---------------------------------------------------------------- explorer
 
@@ -29,7 +33,7 @@ fn walk(path, depth, out):
     if depth > 4:
         return
     for n in fs.list(path):
-        if n.name.startswith("."):
+        if n.name.startswith(".") and not showHidden:
             continue
         out.append({
             "name": n.name,
@@ -393,8 +397,18 @@ fn onCaret(e):
 
 # ---------------------------------------------------------------- boot
 
+showHidden = sys.settings().get("showHidden")
 reloadTree()
-if fs.exists(paths.join(root, "app.osl")):
+
+fn onRefresh():
+    let v = sys.settings().get("showHidden")
+    if v != showHidden:
+        showHidden = v
+        reloadTree()
+        refresh()
+if openArg != None and openArg != "" and fs.exists(openArg) and not fs.isDir(openArg):
+    openFile(openArg)
+elif fs.exists(paths.join(root, "app.osl")):
     openFile(paths.join(root, "app.osl"))
 elif len(files()) > 0:
     openFile(files()[0].get("path"))

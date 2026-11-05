@@ -18,7 +18,11 @@ fn onRefresh():
     fileCount = fs.count("/")
     let size = fs.size("/")
     sizeText = fs.sizeText(size)
-    percent = math.min(100, math.round(size / 8388608 * 100))
+    let st = sys.storage()
+    if st.get("supported") and st.get("quota") > 0:
+        percent = math.min(100, math.round(size / st.get("quota") * 100))
+    else:
+        percent = 0
     uptimeText = fmtUptime(sys.uptime())
     let info = sys.info()
     cores = info.get("cores")

@@ -33,6 +33,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [apps/ide.md](apps/ide.md) | IDE：布局、快捷键、运行模型与实现 |
+| [apps/utilities.md](apps/utilities.md) | Tasks、Clock、Preview、Logs 与系统设置项 |
 
 ## 其他
 

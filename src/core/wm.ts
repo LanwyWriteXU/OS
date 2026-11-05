@@ -7,6 +7,7 @@ import { iconSvg } from '../ui/icons';
 import { t } from '../i18n';
 
 export interface ManagedWindow extends WindowInfo {
+  fullscreen: boolean;
   el: HTMLElement;
   bar: HTMLElement;
   body: HTMLElement;
@@ -14,6 +15,8 @@ export interface ManagedWindow extends WindowInfo {
   iconEl: HTMLElement;
   rect: { left: number; top: number; width: number; height: number };
   restoreRect: { left: number; top: number; width: number; height: number } | null;
+  animTimer?: number;
+  minimizing?: boolean;
   onClose?: () => void;
 }
 
@@ -35,6 +38,11 @@ export class WindowManager {
   windows: ManagedWindow[] = [];
   activeId = 0;
   onChange: (() => void) | null = null;
+  /**
+   * Where a window should shrink to when minimised. The shell supplies this so
+   * the animation can aim at the real taskbar button / dock icon.
+   */
+  minimizeResolver: ((w: ManagedWindow) => { x: number; y: number } | null) | null = null;
   private z = 100;
   private seq = 0;
   private snapEl: HTMLElement;
@@ -107,6 +115,7 @@ export class WindowManager {
       minimized: false,
       active: true,
       maximized: false,
+      fullscreen: false,
       el,
       bar: el.querySelector('.win-bar') as HTMLElement,
       body: el.querySelector('.win-body') as HTMLElement,
@@ -141,12 +150,41 @@ export class WindowManager {
     }
   }
 
+  /** Screen-space transform that shrinks the window onto `target`. */
+  private ghostTransform(w: ManagedWindow, target: { x: number; y: number }) {
+    const r = w.rect;
+    const scale = Math.max(0.05, Math.min(0.22, 46 / Math.max(r.width, r.height)));
+    const dx = target.x - (r.left + r.width / 2);
+    const dy = target.y - (r.top + r.height / 2);
+    return `translate(${Math.round(dx)}px, ${Math.round(dy)}px) scale(${scale})`;
+  }
+
   focus(w: ManagedWindow | number) {
     const win = typeof w === 'number' ? this.get(w) : w;
     if (!win) return;
     if (win.minimized) {
       win.minimized = false;
       win.el.classList.remove('minimized');
+      // Fly back out of the taskbar button / dock icon it shrank into.
+      const target = this.minimizeResolver?.(win) ?? null;
+      if (target && !win.fullscreen) {
+        win.el.classList.add('restoring');
+        win.el.style.transformOrigin = '50% 50%';
+        win.el.style.transform = this.ghostTransform(win, target);
+        win.el.style.opacity = '0';
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            win.el.style.transform = '';
+            win.el.style.opacity = '';
+          });
+        });
+        window.setTimeout(() => {
+          win.el.classList.remove('restoring');
+          win.el.style.transform = '';
+          win.el.style.opacity = '';
+          win.el.style.transformOrigin = '';
+        }, 280);
+      }
     }
     this.activeId = win.id;
     win.el.style.zIndex = String(++this.z);
@@ -155,10 +193,33 @@ export class WindowManager {
   }
 
   minimize(w: ManagedWindow) {
-    w.minimized = true;
-    w.el.classList.add('minimized');
+    if (w.minimized || w.minimizing) return;
+    const target = w.fullscreen ? null : this.minimizeResolver?.(w) ?? null;
+    if (target) {
+      // Animate towards the target button, then hide once the ghost lands.
+      w.minimizing = true;
+      w.el.classList.add('minimizing');
+      w.el.style.transformOrigin = '50% 50%';
+      w.el.style.transform = this.ghostTransform(w, target);
+      w.el.style.opacity = '0';
+      w.el.style.pointerEvents = 'none';
+      window.setTimeout(() => {
+        w.minimizing = false;
+        w.minimized = true;
+        w.el.classList.remove('minimizing');
+        w.el.classList.add('minimized');
+        w.el.style.transform = '';
+        w.el.style.opacity = '';
+        w.el.style.pointerEvents = '';
+        w.el.style.transformOrigin = '';
+        this.onChange?.();
+      }, 200);
+    } else {
+      w.minimized = true;
+      w.el.classList.add('minimized');
+    }
     if (this.activeId === w.id) {
-      const next = this.windows.filter((x) => !x.minimized && x.id !== w.id).pop();
+      const next = this.windows.filter((x) => !x.minimized && !x.minimizing && x.id !== w.id).pop();
       this.activeId = next?.id ?? 0;
       if (next) this.focus(next);
     }
@@ -173,10 +234,20 @@ export class WindowManager {
     else this.focus(w);
   }
 
+  /** Runs a geometry change with a short transition instead of a jump. */
+  private animate(w: ManagedWindow) {
+    if (!w.el) return;
+    w.el.classList.add('animating');
+    void w.el.offsetWidth;
+    if (w.animTimer) clearTimeout(w.animTimer);
+    w.animTimer = window.setTimeout(() => w.el.classList.remove('animating'), 240);
+  }
+
   maximize(w: ManagedWindow) {
     if (w.maximized) return;
     w.restoreRect = { ...w.rect };
     const r = this.layer.getBoundingClientRect();
+    this.animate(w);
     w.rect = { left: 0, top: 0, width: r.width, height: r.height };
     w.maximized = true;
     w.el.classList.add('maximized');
@@ -186,6 +257,7 @@ export class WindowManager {
 
   restore(w: ManagedWindow) {
     if (!w.maximized) return;
+    this.animate(w);
     w.maximized = false;
     w.el.classList.remove('maximized');
     if (w.restoreRect) w.rect = { ...w.restoreRect };
@@ -196,6 +268,51 @@ export class WindowManager {
   toggleMax(w: ManagedWindow) {
     if (w.maximized) this.restore(w);
     else this.maximize(w);
+  }
+
+  /** macOS-style full screen: covers the whole viewport, hides shell chrome. */
+  enterFullscreen(w: ManagedWindow) {
+    if (w.fullscreen) return;
+    if (!w.maximized) w.restoreRect = { ...w.rect };
+    w.fullscreen = true;
+    w.el.classList.add('fullscreen');
+    document.body.classList.add('in-fullscreen');
+    this.focus(w);
+    this.onChange?.();
+  }
+
+  exitFullscreen(w: ManagedWindow) {
+    if (!w.fullscreen) return;
+    this.animate(w);
+    w.fullscreen = false;
+    w.el.classList.remove('fullscreen');
+    document.body.classList.remove('in-fullscreen');
+    if (!w.maximized) {
+      const r = this.layer.getBoundingClientRect();
+      const width = Math.min(w.restoreRect?.width ?? w.rect.width, r.width);
+      const height = Math.min(w.restoreRect?.height ?? w.rect.height, r.height);
+      w.rect = {
+        left: Math.round((r.width - width) / 2),
+        top: Math.round((r.height - height) / 2),
+        width,
+        height,
+      };
+    }
+    this.apply(w);
+    this.onChange?.();
+  }
+
+  toggleFullscreen(w: ManagedWindow) {
+    if (w.fullscreen) this.exitFullscreen(w);
+    else this.enterFullscreen(w);
+  }
+
+  /** Esc handler: leaves full screen if any window is using it. */
+  exitFullscreenActive(): boolean {
+    const w = this.windows.find((x) => x.fullscreen);
+    if (!w) return false;
+    this.exitFullscreen(w);
+    return true;
   }
 
   close(w: ManagedWindow) {
@@ -218,10 +335,27 @@ export class WindowManager {
   }
 
   setSize(w: ManagedWindow, width: number, height: number) {
+    this.animate(w);
     const r = this.layer.getBoundingClientRect();
     w.rect.width = Math.max(MIN_W, Math.min(width, r.width));
     w.rect.height = Math.max(MIN_H, Math.min(height, r.height));
     this.apply(w);
+  }
+
+  /** Moves a window, keeping at least a sliver on screen. */
+  move(w: ManagedWindow, left: number, top: number) {
+    if (w.maximized) return;
+    const r = this.layer.getBoundingClientRect();
+    w.rect.left = Math.max(-w.rect.width + 90, Math.min(left, r.width - 90));
+    w.rect.top = Math.max(0, Math.min(top, r.height - 40));
+    this.apply(w);
+  }
+
+  /** Centres a window inside the work area. */
+  center(w: ManagedWindow) {
+    if (w.maximized) return;
+    const r = this.layer.getBoundingClientRect();
+    this.move(w, Math.round((r.width - w.rect.width) / 2), Math.round((r.height - w.rect.height) / 2));
   }
 
   /* ------------------------------------------------------------- internals */
@@ -261,41 +395,61 @@ export class WindowManager {
     });
     (w.el.querySelector('.win-btn.max') as HTMLElement).addEventListener('click', (e) => {
       e.stopPropagation();
-      this.toggleMax(w);
+      // macOS: the green light enters full screen; Windows: maximise.
+      if (w.fullscreen || document.body.dataset.style === 'mac') this.toggleFullscreen(w);
+      else this.toggleMax(w);
     });
 
     w.el.addEventListener('pointerdown', () => this.focus(w), true);
 
     w.bar.addEventListener('dblclick', (e) => {
       if ((e.target as HTMLElement).closest('.win-btn')) return;
-      this.toggleMax(w);
+      if (w.fullscreen) this.exitFullscreen(w);
+      else this.toggleMax(w);
     });
 
     w.bar.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       if ((e.target as HTMLElement).closest('.win-btn')) return;
       this.focus(w);
-      const startX = e.clientX;
-      const startY = e.clientY;
+      if (w.fullscreen) return;
+      let startX = e.clientX;
+      let startY = e.clientY;
       let baseLeft = w.rect.left;
       let baseTop = w.rect.top;
-      if (w.maximized) {
-        const ratio = (e.clientX - this.layer.getBoundingClientRect().left) / w.rect.width;
-        this.restore(w);
-        baseLeft = e.clientX - this.layer.getBoundingClientRect().left - w.rect.width * ratio;
-        baseTop = Math.max(0, e.clientY - this.layer.getBoundingClientRect().top - 16);
-        w.rect.left = baseLeft;
-        w.rect.top = baseTop;
-        this.apply(w);
-      }
+      let wasMax = w.maximized;
       let moved = false;
       const onMove = (ev: PointerEvent) => {
-        const dx = ev.clientX - startX;
-        const dy = ev.clientY - startY;
-        if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
+        let dx = ev.clientX - startX;
+        let dy = ev.clientY - startY;
+        if (!moved) {
+          if (Math.abs(dx) + Math.abs(dy) <= 3) return;
+          moved = true;
+          // Only un-maximise once the pointer really starts dragging: a plain
+          // click on a maximised title bar must not shrink the window.
+          if (wasMax) {
+            const layerR = this.layer.getBoundingClientRect();
+            const ratio = (ev.clientX - layerR.left) / Math.max(1, w.rect.width);
+            this.restore(w);
+            baseLeft = ev.clientX - layerR.left - w.rect.width * ratio;
+            baseTop = Math.max(0, ev.clientY - layerR.top - 16);
+            startX = ev.clientX;
+            startY = ev.clientY;
+            w.rect.left = baseLeft;
+            w.rect.top = baseTop;
+            this.apply(w);
+            wasMax = false;
+            dx = 0;
+            dy = 0;
+          }
+        }
         const r = this.layer.getBoundingClientRect();
         w.rect.left = Math.max(-w.rect.width + 90, Math.min(baseLeft + dx, r.width - 90));
-        w.rect.top = Math.max(0, Math.min(baseTop + dy, r.height - 40));
+        // Keep the whole window inside the work area: dragging down to the
+        // taskbar used to slide the window under the clipped layer where it
+        // silently disappeared.
+        const maxTop = Math.max(0, r.height - w.rect.height);
+        w.rect.top = Math.max(0, Math.min(baseTop + dy, maxTop));
         this.apply(w);
         this.snapTarget = this.detectSnap(ev, r, w);
         this.renderSnap(r);

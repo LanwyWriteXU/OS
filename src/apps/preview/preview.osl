@@ -1,0 +1,73 @@
+# preview.osl — a small Markdown viewer for ~/Documents.
+
+let root = "/home/user/Documents"
+let files = []
+let sel = ""
+let blocks = []
+let docTitle = ""
+
+fn loadList():
+    files = []
+    for f in fs.list(root):
+        if f.type == "file" and (f.ext == "md" or f.ext == "txt"):
+            files.append(f)
+    if len(files) > 0:
+        if sel == "" or not fs.exists(sel):
+            let preferred = paths.join(root, "welcome.md")
+            if fs.exists(preferred):
+                openDoc(preferred)
+            else:
+                openDoc(files[0].path)
+    else:
+        blocks = []
+        refresh()
+
+fn openDoc(p):
+    sel = p
+    docTitle = paths.basename(p)
+    blocks = parse(fs.read(p))
+    win.setTitle(docTitle + " — " + t("Preview"))
+    refresh()
+
+fn clean(s):
+    return s.replace("**", "").replace("`", "")
+
+fn parse(text):
+    let out = []
+    let inCode = False
+    let codeLines = []
+    for line in text.split("\n"):
+        if line.startswith("```"):
+            if inCode:
+                out.append({"kind": "code", "text": codeLines.join("\n")})
+                codeLines = []
+                inCode = False
+            else:
+                inCode = True
+            continue
+        if inCode:
+            codeLines.append(line)
+            continue
+        if line.startswith("### "):
+            out.append({"kind": "h3", "text": clean(line[4:])})
+        elif line.startswith("## "):
+            out.append({"kind": "h2", "text": clean(line[3:])})
+        elif line.startswith("# "):
+            out.append({"kind": "h1", "text": clean(line[2:])})
+        elif line.startswith("- ") or line.startswith("* "):
+            out.append({"kind": "li", "text": clean(line[2:])})
+        elif line.startswith("---"):
+            out.append({"kind": "hr", "text": ""})
+        elif line.strip() == "":
+            continue
+        else:
+            out.append({"kind": "p", "text": clean(line)})
+    if inCode and len(codeLines) > 0:
+        out.append({"kind": "code", "text": codeLines.join("\n")})
+    return out
+
+fn refreshList():
+    loadList()
+    refresh()
+
+loadList()

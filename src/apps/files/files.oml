@@ -1,5 +1,5 @@
 <Window title="Files" icon="app-files">
-  <HBox class="files">
+  <HBox class="files" onkeydown="onKey(event)">
     <VBox class="files-side">
       <Label class="side-title" text="Quick access"/>
       <Button class="side-item" icon="home" text="Home" onclick="go('/home/user')"/>
@@ -9,6 +9,10 @@
       <Button class="side-item" icon="image" text="Pictures" onclick="go('/home/user/Pictures')"/>
       <Button class="side-item" icon="code" text="Projects" onclick="go('/home/user/Projects')"/>
       <Spacer/>
+      <Button class="side-item" icon="apps" text="Applications" onclick="go('/usr/share/apps')"/>
+      <Button class="side-item" icon="grid" text="App shortcuts" onclick="go('/usr/share/applications')"/>
+      <Button class="side-item" icon="code" text="System sources" onclick="go('/usr/share/os')"/>
+      <Button class="side-item" icon="book" text="Translations" onclick="go('/usr/share/i18n')"/>
       <Button class="side-item" icon="hard-drive" text="System" onclick="go('/etc')"/>
       <Label class="side-meta" text="{t('{0} items in this folder', len(entries))}"/>
     </VBox>
@@ -19,12 +23,14 @@
         <IconButton icon="arrow-right" title="Forward" onclick="fwd()"/>
         <IconButton icon="arrow-up" title="Up" onclick="up()"/>
         <IconButton icon="refresh" title="Refresh" onclick="reload()"/>
-        <HBox class="crumbs" flex="1">
-          <For each="crumbs()" as="c">
+        <HBox class="crumbs" if="{!pathEdit}" flex="1" ondblclick="editPath()">
+          <Button class="crumb root" icon="hard-drive" title="Root" onclick="go('/')"/>
+          <For each="crumbs()" as="c" key="c.path">
+            <Icon name="chevron-right" size="11" class="crumb-sep"/>
             <Button class="crumb {c.path == cwd ? 'last' : ''}" text="{c.name}" onclick="go(c.path)"/>
-            <Label class="muted" text="/" if="{c.path != cwd}"/>
           </For>
         </HBox>
+        <Input class="files-path" if="{pathEdit}" bind="pathDraft" placeholder="/home/user" focus="true" onkeydown="pathKey(event)"/>
         <Input class="files-search" bind="query" placeholder="Search…" oninput="doSearch()"/>
         <IconButton icon="{view == 'grid' ? 'list' : 'grid'}" title="Toggle view" onclick="toggleView()"/>
       </HBox>
@@ -41,7 +47,7 @@
           <For each="entries" as="f">
             <Button class="tile {sel == f.path ? 'sel' : ''}" onclick="pick(f.path)" ondblclick="open(f)" oncontextmenu="menuFor(f, event)">
               <Icon name="{iconFor(f)}" size="34"/>
-              <Label class="tile-name" text="{f.name}"/>
+              <Label class="tile-name" text="{f.label}"/>
             </Button>
           </For>
         </Grid>
@@ -55,7 +61,7 @@
           <For each="entries" as="f">
             <HBox class="row {sel == f.path ? 'sel' : ''}" onclick="pick(f.path)" ondblclick="open(f)" oncontextmenu="menuFor(f, event)">
               <Icon name="{iconFor(f)}" size="17"/>
-              <Label text="{f.name}" flex="1"/>
+              <Label text="{f.label}" flex="1"/>
               <Label class="cell" text="{sizeText(f)}"/>
               <Label class="cell" text="{dateText(f)}"/>
             </HBox>

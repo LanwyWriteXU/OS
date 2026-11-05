@@ -1,0 +1,49 @@
+<Window title="Preview" icon="app-preview">
+  <HBox class="preview">
+    <VBox class="preview-side">
+      <HBox class="preview-side-head">
+        <Label class="side-title" text="Documents"/>
+        <Spacer/>
+        <IconButton icon="refresh" title="Refresh" onclick="refreshList()"/>
+      </HBox>
+      <Scroll class="preview-list" flex="1">
+        <For each="files" as="f" key="f.path">
+          <Button class="preview-item {sel == f.path ? 'sel' : ''}" onclick="openDoc(f.path)">
+            <Icon name="file-text" size="15"/>
+            <Label class="preview-item-name" text="{f.name}" flex="1"/>
+          </Button>
+        </For>
+        <VBox class="empty" if="{len(files) == 0}">
+          <Icon name="file-text" size="34"/>
+          <Label text="No documents"/>
+        </VBox>
+      </Scroll>
+    </VBox>
+
+    <VBox class="preview-main" flex="1">
+      <HBox class="preview-bar">
+        <Icon name="book" size="14"/>
+        <Label class="preview-title" text="{docTitle}" flex="1"/>
+        <Label class="set-desc" text="{t('{0} blocks', len(blocks))}"/>
+      </HBox>
+      <Scroll class="preview-body" flex="1">
+        <VBox class="md">
+          <For each="blocks" as="b" index="i" key="i">
+            <Label class="md-h1" text="{b.text}" if="{b.kind == 'h1'}"/>
+            <Label class="md-h2" text="{b.text}" if="{b.kind == 'h2'}"/>
+            <Label class="md-h3" text="{b.text}" if="{b.kind == 'h3'}"/>
+            <Label class="md-p" text="{b.text}" if="{b.kind == 'p'}"/>
+            <HBox class="md-li" if="{b.kind == 'li'}">
+              <Div class="md-dot"/>
+              <Label text="{b.text}" flex="1"/>
+            </HBox>
+            <VBox class="md-code" if="{b.kind == 'code'}">
+              <Label text="{b.text}"/>
+            </VBox>
+            <Divider if="{b.kind == 'hr'}"/>
+          </For>
+        </VBox>
+      </Scroll>
+    </VBox>
+  </HBox>
+</Window>

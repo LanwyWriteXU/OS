@@ -12,13 +12,17 @@ let weekdays = []
 let header = ""
 let selText = ""
 let dayCount = 0
+let weekStart = "sun"
 
 fn weekdayNames():
     let out = []
     let ref = time.make(2024, 1, 7)
+    let start = 0
+    if weekStart == "mon":
+        start = 1
     let i = 0
     while i < 7:
-        out.append(time.intl(ref + i * 86400000, "weekdayShort"))
+        out.append(time.intl(ref + ((i + start) % 7) * 86400000, "weekdayShort"))
         i += 1
     weekdays = out
 
@@ -26,6 +30,8 @@ fn build():
     let first = time.make(year, month, 1)
     let fp = time.parts(first)
     let offset = fp.get("weekday")
+    if weekStart == "mon":
+        offset = (offset + 6) % 7
     let days = fp.get("daysInMonth")
     dayCount = days
     header = time.intl(first, "monthYear")
@@ -75,5 +81,13 @@ fn goToday():
     build()
     refresh()
 
+weekStart = sys.settings().get("weekStart")
 weekdayNames()
 build()
+
+fn onRefresh():
+    let w = sys.settings().get("weekStart")
+    if w != weekStart:
+        weekStart = w
+        weekdayNames()
+        build()

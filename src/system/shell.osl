@@ -11,9 +11,12 @@ let user = "origin"
 let avatar = "O"
 let uiLang = "en"
 let clock24 = True
+let clockSeconds = False
+let iconSize = 44
+let deskSnap = True
 let clock = ""
 let dateStr = ""
-let batteryText = "82%"
+let batteryText = "—"
 let apps = []
 let deskIcons = []
 let running = []
@@ -22,20 +25,52 @@ let recent = []
 let hits = []
 let search = ""
 let startOpen = False
+let startClosing = False
 let activeMenu = ""
 let menuX = 40
 let activeApp = "Finder"
 let deskSel = ""
 let menuTarget = ""
 let places = []
+let showHidden = False
+let layoutFile = "/home/user/.config/desktop-layout.json"
+let layout = {}
+let dragPath = ""
+let dragMoved = False
+let dragDX = 0
+let dragDY = 0
+let deskLeft = 0
+let deskTop = 0
+let pinned = []
+let dockPinned = []
+let battery = {}
+let volume = 62
+let muted = False
+let online = True
+let customWall = ""
 let searchOpen = False
+let trayOpen = False
+let menuApp = ""
+let menuWin = 0
+let hoverApp = ""
+let previewX = 12
+let previewHeld = False
+let previewPending = False
 
 # ---------------------------------------------------------------- refresh
 
 fn tickClock():
-    clock = time.format(time.now(), clock24 ? "HH:mm" : "hh:mm A")
+    if clockSeconds:
+        clock = time.format(time.now(), clock24 ? "HH:mm:ss" : "hh:mm:ss A")
+    else:
+        clock = time.format(time.now(), clock24 ? "HH:mm" : "hh:mm A")
     dateStr = time.format(time.now(), "ddd, MMM d")
-    batteryText = "82%"
+    if battery.get("supported"):
+        batteryText = str(battery.get("level")) + "%"
+        if battery.get("charging"):
+            batteryText = batteryText + " ⚡"
+    else:
+        batteryText = ""
 
 fn findApp(id):
     for a in apps:
@@ -57,12 +92,32 @@ fn onRefresh():
     user = s.get("user")
     uiLang = s.get("lang")
     clock24 = s.get("clock24")
+    clockSeconds = s.get("clockSeconds")
+    iconSize = s.get("deskIconSize")
+    deskSnap = s.get("deskSnap")
+    showHidden = s.get("showHidden")
+    pinned = s.get("pinned")
+    dockPinned = s.get("dockPinned")
+    volume = s.get("volume")
+    muted = s.get("muted")
     apps = sys.apps()
     running = sys.windows()
     notifs = sys.notifications()
     recent = sys.recent()
+    battery = sys.battery()
+    online = sys.network()
+    if wallpaper == "custom":
+        let wp = s.get("wallpaperPath")
+        if wp != "" and fs.exists(wp):
+            customWall = fs.read(wp)
+        else:
+            customWall = ""
+    else:
+        customWall = ""
     avatar = user[:1].upper()
     tickClock()
+    if dragPath == "":
+        layout = loadLayout()
     places = [
         {"name": t("Home"), "path": "/home/user", "icon": "home"},
         {"name": t("Desktop"), "path": "/home/user/Desktop", "icon": "monitor"},
@@ -75,13 +130,48 @@ fn onRefresh():
     for w in running:
         if w.active:
             activeApp = findAppName(w.appId)
-    rebuildDesktop()
+    if dragPath == "":
+        rebuildDesktop()
+
+fn loadLayout():
+    if not fs.exists(layoutFile):
+        return {}
+    try:
+        let data = fs.readJson(layoutFile)
+        if data == None:
+            return {}
+        return data
+    except e:
+        return {}
+
+fn autoPos(i):
+    let vp = sys.viewport()
+    let cell = iconSize + 54
+    let rows = math.floor((vp.get("height") - 40) / cell)
+    if rows < 3:
+        rows = 3
+    let col = math.floor(i / rows)
+    let row = i - col * rows
+    return {"x": 14 + col * (iconSize + 46), "y": 18 + row * cell}
+
+fn posX(p):
+    let v = layout.get(p)
+    if v == None:
+        return 0
+    return v.get("x")
+
+fn posY(p):
+    let v = layout.get(p)
+    if v == None:
+        return 0
+    return v.get("y")
 
 fn rebuildDesktop():
     let out = []
     let nodes = fs.list("/home/user/Desktop")
+    let i = 0
     for n in nodes:
-        if n.name.startswith("."):
+        if n.name.startswith(".") and not showHidden:
             continue
         let icon = "file-text"
         let label = n.name
@@ -102,6 +192,17 @@ fn rebuildDesktop():
             icon = "image"
         elif n.ext == "md" or n.ext == "txt":
             icon = "file-text"
+        let pos = layout.get(n.path)
+        if pos == None:
+            layout.set(n.path, autoPos(i))
+        elif deskSnap:
+            # Grid mode is a view over the saved layout: positions are snapped
+            # for display, but the original free coordinates stay on disk, so
+            # turning the switch off restores them.
+            layout.set(n.path, {
+                "x": snapTo(pos.get("x"), iconSize + 46, 14),
+                "y": snapTo(pos.get("y"), iconSize + 54, 18),
+            })
         out.append({
             "name": label,
             "file": n.name,
@@ -110,7 +211,74 @@ fn rebuildDesktop():
             "icon": icon,
             "app": appId,
         })
+        i += 1
     deskIcons = out
+
+fn dragStart(it, e):
+    if e.button != 0:
+        return
+    let p = it.get("path")
+    dragPath = p
+    deskSel = p
+    dragMoved = False
+    dragDX = e.x - e.rect.left
+    dragDY = e.y - e.rect.top
+    deskLeft = e.rect.left - posX(p)
+    deskTop = e.rect.top - posY(p)
+    refresh()
+
+fn snapTo(v, cell, pad):
+    return pad + math.round((v - pad) / cell) * cell
+
+fn dragMove(e):
+    if dragPath == "":
+        return
+    let vp = sys.viewport()
+    let x = math.round(e.x - deskLeft - dragDX)
+    let y = math.round(e.y - deskTop - dragDY)
+    let maxX = vp.get("width") - iconSize - 48
+    let maxY = vp.get("height") - iconSize - 56
+    if x < 2:
+        x = 2
+    if y < 2:
+        y = 2
+    if x > maxX:
+        x = maxX
+    if y > maxY:
+        y = maxY
+    if deskSnap:
+        x = snapTo(x, iconSize + 46, 14)
+        y = snapTo(y, iconSize + 54, 18)
+    dragMoved = True
+    layout.set(dragPath, {"x": x, "y": y})
+    refresh()
+
+fn dragEnd():
+    if dragPath == "":
+        return
+    let moved = dragMoved
+    dragPath = ""
+    dragMoved = False
+    if moved:
+        fs.writeJson(layoutFile, layout)
+        refresh()
+    # A plain click leaves the DOM untouched so click/dblclick can still fire.
+
+fn arrangeIcons():
+    layout = {}
+    fs.writeJson(layoutFile, {})
+    rebuildDesktop()
+    ui.toast(t("Icons arranged"), "grid")
+    refresh()
+
+fn toggleDeskSnap():
+    deskSnap = not deskSnap
+    sys.setSetting("deskSnap", deskSnap)
+    if deskSnap:
+        ui.toast(t("Align icons to grid"), "grid")
+    else:
+        ui.toast(t("Free icon placement"), "grid")
+    refresh()
 
 fn tick():
     tickClock()
@@ -207,18 +375,33 @@ fn openItem(it):
 
 # ---------------------------------------------------------------- start menu
 
-fn toggleStart():
-    startOpen = not startOpen
-    activeMenu = ""
-    if not startOpen:
-        search = ""
-        hits = []
+fn hideStart():
+    startClosing = False
+    startOpen = False
+    search = ""
+    hits = []
     refresh()
 
-fn closeMenus():
-    if startOpen or activeMenu != "":
-        startOpen = False
+fn toggleStart():
+    if startOpen:
+        startClosing = True
+        refresh()
+        after(140, hideStart)
+    else:
+        startOpen = True
+        startClosing = False
         activeMenu = ""
+        trayOpen = False
+        refresh()
+
+fn closeMenus():
+    if startOpen:
+        startClosing = True
+        refresh()
+        after(140, hideStart)
+    if activeMenu != "" or trayOpen:
+        activeMenu = ""
+        trayOpen = False
         refresh()
 
 fn showDesktop():
@@ -226,22 +409,432 @@ fn showDesktop():
     startOpen = False
     refresh()
 
-fn taskClick(id):
-    for w in sys.windows():
-        if w.id == id:
-            if w.minimized:
-                sys.focusWindow(id)
-            elif w.active:
-                sys.minimizeWindow(id)
-            else:
-                sys.focusWindow(id)
+# ------------------------------------------------------------ taskbar / dock
+
+fn windowsOf(appId):
+    let out = []
+    for w in running:
+        if w.appId == appId:
+            out.append(w)
+    return out
+
+fn taskState(wins):
+    let state = "pinned"
+    let wid = 0
+    if len(wins) > 0:
+        wid = wins[0].id
+        state = "open"
+        let visible = False
+        for w in wins:
+            if w.active:
+                wid = w.id
+                state = "active"
+            if not w.minimized:
+                visible = True
+        if not visible:
+            state = "min"
+    return {"state": state, "winId": wid}
+
+fn taskItems():
+    let out = []
+    for id in pinned:
+        let a = findApp(id)
+        if a == None:
+            continue
+        let wins = windowsOf(id)
+        let st = taskState(wins)
+        out.append({
+            "key": "app:" + id,
+            "kind": "app",
+            "appId": id,
+            "winId": st.get("winId"),
+            "name": a.name,
+            "icon": a.icon,
+            "state": st.get("state"),
+            "count": len(wins),
+            "movable": True,
+        })
+    # Running apps that are not pinned get one merged button as well.
+    let seenApps = []
+    for w in running:
+        if w.appId in pinned:
+            continue
+        if w.appId in seenApps:
+            continue
+        seenApps.append(w.appId)
+        let wins = windowsOf(w.appId)
+        let st = taskState(wins)
+        out.append({
+            "key": "run:" + w.appId,
+            "kind": "app",
+            "appId": w.appId,
+            "winId": st.get("winId"),
+            "name": findAppName(w.appId),
+            "icon": w.icon,
+            "state": st.get("state"),
+            "count": len(wins),
+            "movable": False,
+        })
+    return out
+
+fn taskItemClick(item):
+    trayOpen = False
+    let id = item.get("appId")
+    let wins = windowsOf(id)
+    if len(wins) == 0:
+        launch(id)
+        return
+    if len(wins) == 1:
+        let w = wins[0]
+        if w.minimized:
+            sys.focusWindow(w.id)
+        elif w.active:
+            sys.minimizeWindow(w.id)
+        else:
+            sys.focusWindow(w.id)
+        refresh()
+        return
+    # Grouped buttons cycle through the app's windows instead of minimising.
+    let activeIdx = -1
+    let i = 0
+    while i < len(wins):
+        if wins[i].active:
+            activeIdx = i
+        i += 1
+    if activeIdx < 0:
+        let target = wins[0]
+        for w in wins:
+            if not w.minimized:
+                target = w
+        sys.focusWindow(target.id)
+    else:
+        let next = wins[(activeIdx + 1) % len(wins)]
+        sys.focusWindow(next.id)
     refresh()
 
-fn isRunning(appId):
+fn taskAux(item, e):
+    if e.button != 1:
+        return
+    e.prevent()
+    launch(item.get("appId"))
+
+fn previewItems():
+    let out = []
+    if hoverApp == "":
+        return out
+    for w in windowsOf(hoverApp):
+        out.append({
+            "id": w.id,
+            "index": len(out) + 1,
+            "title": w.title,
+            "icon": w.icon,
+            "active": w.active,
+            "minimized": w.minimized,
+        })
+    return out
+
+fn previewShow(item, e):
+    let id = item.get("appId")
+    if len(windowsOf(id)) == 0:
+        # Hovering a pinned-but-idle icon offers to launch instead.
+        if hoverApp != id:
+            hoverApp = id
+            previewPending = False
+            previewHeld = False
+            previewX = 12
+            refresh()
+        return
+    let vp = sys.viewport()
+    let width = 280
+    let x = math.round(e.rect.left + e.rect.width / 2 - width / 2)
+    if x < 8:
+        x = 8
+    if x > vp.get("width") - width - 8:
+        x = vp.get("width") - width - 8
+    previewX = x
+    if hoverApp != id:
+        hoverApp = id
+        previewHeld = False
+        refresh()
+    else:
+        previewHeld = False
+
+fn previewHide():
+    after(180, previewMaybeHide)
+
+fn previewMaybeHide():
+    if previewHeld:
+        return
+    if hoverApp == "":
+        return
+    hoverApp = ""
+    refresh()
+
+fn previewHold():
+    previewHeld = True
+
+fn previewLeave():
+    previewHeld = False
+    after(80, previewMaybeHide)
+
+fn previewNew():
+    let id = hoverApp
+    hoverApp = ""
+    previewHeld = False
+    sys.open(id)
+    refresh()
+
+fn previewPick(id):
+    hoverApp = ""
+    previewHeld = False
+    sys.focusWindow(id)
+    refresh()
+
+fn openRun():
+    startOpen = False
+    activeMenu = ""
+    trayOpen = False
+    sys.open("run")
+    refresh()
+
+fn taskDrop(item, e):
+    let from = e.dragSource
+    let to = item.get("appId")
+    if from == "" or to == "" or from == to:
+        return
+    if not (from in pinned) or not (to in pinned):
+        return
+    let next = []
+    for x in pinned:
+        if x != from:
+            next.append(x)
+    let idx = next.index(to)
+    if idx < 0:
+        idx = len(next)
+    next.insert(idx, from)
+    setPinned(next)
+
+fn setPinned(list):
+    pinned = list
+    sys.setSetting("pinned", list)
+    refresh()
+
+fn pinApp(id):
+    if id in pinned:
+        return
+    let next = []
+    for x in pinned:
+        next.append(x)
+    next.append(id)
+    setPinned(next)
+
+fn unpinApp(id):
+    let next = []
+    for x in pinned:
+        if x != id:
+            next.append(x)
+    setPinned(next)
+
+fn setDockPinned(list):
+    dockPinned = list
+    sys.setSetting("dockPinned", list)
+    refresh()
+
+fn dockApp(id):
+    if id in dockPinned:
+        return
+    let next = []
+    for x in dockPinned:
+        next.append(x)
+    next.append(id)
+    setDockPinned(next)
+
+fn undockApp(id):
+    let next = []
+    for x in dockPinned:
+        if x != id:
+            next.append(x)
+    setDockPinned(next)
+
+fn dockItems():
+    let out = []
+    for id in dockPinned:
+        let a = findApp(id)
+        if a == None:
+            continue
+        let win = None
+        for w in windowsOf(id):
+            win = w
+        let wid = 0
+        let runningNow = False
+        if win != None:
+            wid = win.id
+            runningNow = True
+        out.append({
+            "key": "dock:" + id,
+            "kind": "app",
+            "appId": id,
+            "winId": wid,
+            "name": a.name,
+            "icon": a.icon,
+            "running": runningNow,
+        })
+    let seenApps = []
     for w in running:
-        if w.appId == appId and not w.minimized:
-            return True
-    return False
+        if w.appId in dockPinned:
+            continue
+        if w.appId in seenApps:
+            continue
+        seenApps.append(w.appId)
+        let a = findApp(w.appId)
+        if a == None:
+            continue
+        out.append({
+            "key": "run:" + w.appId,
+            "kind": "app",
+            "appId": w.appId,
+            "winId": w.id,
+            "name": a.name,
+            "icon": a.icon,
+            "running": True,
+        })
+    let mins = []
+    for w in running:
+        if w.minimized:
+            mins.append(w)
+    let start = len(mins) - 6
+    if start < 0:
+        start = 0
+    let mi = start
+    while mi < len(mins):
+        let w = mins[mi]
+        out.append({
+                "key": "min:" + str(w.id),
+                "kind": "min",
+                "appId": w.appId,
+                "winId": w.id,
+                "name": w.title,
+                "icon": w.icon,
+                "running": True,
+            })
+        mi += 1
+    return out
+
+fn dockClick(d):
+    trayOpen = False
+    if d.get("kind") == "min":
+        let wid = d.get("winId")
+        if wid != 0:
+            sys.focusWindow(wid)
+            refresh()
+            return
+    taskItemClick(d)
+
+fn appMenu(a, e):
+    e.stop()
+    menuApp = a.get("id")
+    let items = [
+        {"label": t("Open"), "icon": "external", "id": "open"},
+        {"label": t("New window"), "icon": "copy", "id": "new"},
+        {"sep": True},
+    ]
+    if style == "mac":
+        if menuApp in dockPinned:
+            items.append({"label": t("Remove from Dock"), "icon": "trash", "id": "undock"})
+        else:
+            items.append({"label": t("Keep in Dock"), "icon": "apps", "id": "dock"})
+    else:
+        if menuApp in pinned:
+            items.append({"label": t("Unpin from taskbar"), "icon": "star", "id": "unpin"})
+        else:
+            items.append({"label": t("Pin to taskbar"), "icon": "star", "id": "pin"})
+    items.append({"label": t("Show in Files"), "icon": "folder", "id": "reveal"})
+    ui.menu(items, appMenuPick, e.x, e.y)
+
+fn appMenuPick(it):
+    let id = it.get("id")
+    let appId = menuApp
+    if appId == "":
+        return
+    if id == "open" or id == "new":
+        launch(appId)
+    elif id == "pin":
+        pinApp(appId)
+    elif id == "unpin":
+        unpinApp(appId)
+    elif id == "dock":
+        dockApp(appId)
+    elif id == "undock":
+        undockApp(appId)
+    elif id == "reveal":
+        sys.open("files", {"path": "/usr/share/apps/" + appId})
+    refresh()
+
+fn taskItemMenu(item, e):
+    e.stop()
+    menuApp = item.get("appId")
+    menuWin = item.get("winId")
+    let items = []
+    if menuWin != 0:
+        items.append({"label": t("Close window"), "icon": "x", "id": "close"})
+    items.append({"label": t("New window"), "icon": "plus", "id": "new"})
+    if menuApp in pinned:
+        items.append({"label": t("Unpin from taskbar"), "icon": "star", "id": "unpin"})
+    ui.menu(items, taskItemPick, e.x, e.y)
+
+fn taskItemPick(it):
+    let id = it.get("id")
+    if id == "close" and menuWin != 0:
+        sys.closeWindow(menuWin)
+    elif id == "new":
+        launch(menuApp)
+    elif id == "unpin":
+        unpinApp(menuApp)
+    refresh()
+
+fn dockMenu(d, e):
+    e.stop()
+    menuApp = d.get("appId")
+    menuWin = d.get("winId")
+    if d.get("kind") == "min":
+        ui.menu([
+            {"label": t("Restore"), "icon": "restore", "id": "restore"},
+            {"label": t("Close window"), "icon": "x", "id": "close"},
+        ], dockMinPick, e.x, e.y)
+        return
+    let items = [
+        {"label": t("Open"), "icon": "external", "id": "open"},
+        {"label": t("New window"), "icon": "plus", "id": "new"},
+        {"sep": True},
+    ]
+    if menuApp in dockPinned:
+        items.append({"label": t("Remove from Dock"), "icon": "trash", "id": "undock"})
+    else:
+        items.append({"label": t("Keep in Dock"), "icon": "apps", "id": "dock"})
+    items.append({"label": t("Quit"), "icon": "x", "id": "quit"})
+    ui.menu(items, dockPick, e.x, e.y)
+
+fn dockPick(it):
+    let id = it.get("id")
+    if id == "open" or id == "new":
+        launch(menuApp)
+    elif id == "dock":
+        dockApp(menuApp)
+    elif id == "undock":
+        undockApp(menuApp)
+    elif id == "quit":
+        for w in sys.windows():
+            if w.appId == menuApp:
+                sys.closeWindow(w.id)
+    refresh()
+
+fn dockMinPick(it):
+    let id = it.get("id")
+    if id == "restore" and menuWin != 0:
+        sys.focusWindow(menuWin)
+    elif id == "close" and menuWin != 0:
+        sys.closeWindow(menuWin)
+    refresh()
 
 fn dismissNotif(id):
     sys.dismissNotification(id)
@@ -345,6 +938,11 @@ fn menuPick(mi):
 
 # ---------------------------------------------------------- desktop menu
 
+fn alignLabel():
+    if deskSnap:
+        return "✓ " + t("Align icons to grid")
+    return t("Align icons to grid")
+
 fn desktopMenu(e):
     if e.target.closest(".win") != None:
         return
@@ -357,10 +955,13 @@ fn desktopMenu(e):
         {"label": t("New file"), "icon": "file-plus", "id": "newfile"},
         {"label": t("New shortcut"), "icon": "apps", "id": "shortcut"},
         {"sep": True},
+        {"label": t("Run…"), "icon": "command", "id": "run"},
         {"label": t("Open Terminal"), "icon": "terminal", "id": "terminal"},
         {"label": t("Change wallpaper"), "icon": "image", "id": "wallpaper"},
         {"label": t("Display settings"), "icon": "monitor", "id": "settings"},
         {"sep": True},
+        {"label": alignLabel(), "icon": "grid", "id": "togglesnap"},
+        {"label": t("Sort icons"), "icon": "sort", "id": "sort"},
         {"label": t("Refresh desktop"), "icon": "refresh", "id": "refresh"},
         {"label": t("About OS"), "icon": "info", "id": "about"},
     ], desktopMenuPick, e.x, e.y)
@@ -373,12 +974,18 @@ fn desktopMenuPick(it):
         ui.prompt(t("New file"), "untitled.txt", createFile)
     elif id == "shortcut":
         shortcutMenu()
+    elif id == "run":
+        openRun()
     elif id == "terminal":
         sys.open("terminal")
     elif id == "settings" or id == "wallpaper":
         sys.open("settings", {"tab": "appearance"})
     elif id == "about":
         sys.open("about")
+    elif id == "togglesnap":
+        toggleDeskSnap()
+    elif id == "sort":
+        arrangeIcons()
     elif id == "refresh":
         rebuildDesktop()
         ui.toast(t("Refreshed"), "refresh")
@@ -486,23 +1093,36 @@ fn createFile(name):
 
 # ---------------------------------------------------------------- tray
 
-fn trayMenu(e):
-    ui.menu([
-        {"label": t("Wi-Fi: connected"), "icon": "wifi", "id": "noop"},
-        {"label": t("Volume: 62%"), "icon": "volume", "id": "noop"},
-        {"label": t("Battery: 82%"), "icon": "battery", "id": "noop"},
-        {"sep": True},
-        {"label": t("Theme: ") + theme, "icon": theme == "dark" ? "moon" : "sun", "id": "theme"},
-        {"label": t("All settings"), "icon": "settings", "id": "settings"},
-    ], trayPick, e.x, e.y)
-
-fn trayPick(it):
-    let id = it.get("id")
-    if id == "theme":
-        sys.setSetting("theme", theme == "dark" ? "light" : "dark")
-    elif id == "settings":
-        sys.open("settings")
+fn toggleTray():
+    trayOpen = not trayOpen
+    startOpen = False
+    activeMenu = ""
     refresh()
+
+fn applyVolume():
+    sys.setVolume(volume)
+    refresh()
+
+fn toggleMute():
+    muted = sys.toggleMute()
+    refresh()
+
+fn traySettings():
+    trayOpen = False
+    sys.open("settings")
+    refresh()
+
+fn batteryNote():
+    if not battery.get("supported"):
+        return t("Battery status unavailable")
+    if battery.get("charging"):
+        return t("Charging")
+    return t("On battery")
+
+fn wifiNote():
+    if online:
+        return t("Connected")
+    return t("Offline")
 
 fn openCalendar():
     sys.open("calendar")

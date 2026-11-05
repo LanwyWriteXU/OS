@@ -4,6 +4,8 @@
  */
 import shellOml from '../system/shell.oml?raw';
 import shellOsl from '../system/shell.osl?raw';
+import dialogOml from '../system/dialog.oml?raw';
+import menuOml from '../system/menu.oml?raw';
 import { Vfs, basename } from './fs';
 import { SettingsStore } from './settings';
 import { WindowManager, type ManagedWindow } from './wm';
@@ -14,7 +16,7 @@ import { createBuiltins, formatTime } from '../osl/builtins';
 import type { Host, KernelApi, WindowHandle, WindowInfo, AppInfo, UiBridge } from '../osl/host';
 import { APPS, getApp, type AppDef } from '../apps/registry';
 import { iconSvg } from '../ui/icons';
-import { t as tr } from '../i18n';
+import { t as tr, setCatalog, catalogJson, catalogFor, type Lang } from '../i18n';
 
 interface AppInstance {
   win: ManagedWindow;
@@ -41,11 +43,26 @@ export class Kernel implements KernelApi {
   instances = new Map<number, AppInstance>();
   private notifs: Notification[] = [];
   private notifSeq = 0;
+  private logEntries: Array<{ id: number; time: number; level: string; message: string }> = [];
+  private logSeq = 0;
   private recentList: Array<{ name: string; path: string }> = [];
   private bootTime = Date.now();
   private root!: HTMLElement;
   private lockEl: HTMLElement | null = null;
   private sysHost!: Host;
+  private batteryState = {
+    supported: false,
+    level: 100,
+    charging: false,
+    chargingTime: -1,
+    dischargingTime: -1,
+  };
+  private online = true;
+  private audioCtx: AudioContext | null = null;
+  /** Metadata loaded from /etc/apps.json (name, icon, size, hidden). */
+  private appMeta = new Map<string, any>();
+  /** Real IndexedDB quota/usage, read once at boot (bytes). */
+  private storageQuota = { supported: false, usage: 0, quota: 0 };
 
   constructor(public vfs: Vfs, public settings: SettingsStore) {
     this.loadRecent();
@@ -59,12 +76,144 @@ export class Kernel implements KernelApi {
       for (const inst of this.instances.values()) inst.ui.scheduleRefresh();
       this.shellUi?.scheduleRefresh();
     });
+    this.wm.minimizeResolver = (w) => {
+      // Prefer the window's own button; fall back to the pinned app button so
+      // the first minimisation into the dock still has somewhere to fly to.
+      const el =
+        (this.root?.querySelector(`[data-win="${w.id}"]`) as HTMLElement | null) ??
+        (this.root?.querySelector(`[data-app="${w.appId}"]`) as HTMLElement | null);
+      const box = el?.getBoundingClientRect();
+      if (!box || !box.width) return null;
+      // The window layer clips at the work area edge, so aim a few pixels
+      // inside it: the ghost then appears to sink behind the taskbar/dock.
+      const layer = this.wm.layer?.getBoundingClientRect();
+      const y = Math.min(box.top + box.height / 2, (layer?.bottom ?? box.bottom) - 6);
+      return { x: box.left + box.width / 2, y };
+    };
+    this.initBattery();
+    this.initStorage();
+    this.online = typeof navigator === 'undefined' ? true : navigator.onLine;
+    window.addEventListener('online', () => {
+      this.online = true;
+      this.shellUi?.scheduleRefresh();
+    });
+    window.addEventListener('offline', () => {
+      this.online = false;
+      this.shellUi?.scheduleRefresh();
+    });
+  }
+
+  /* -------------------------------------------------------------- sensors */
+
+  private initBattery() {
+    const nav = navigator as any;
+    if (typeof nav.getBattery !== 'function') return;
+    nav
+      .getBattery()
+      .then((battery: any) => {
+        const sync = () => {
+          this.batteryState = {
+            supported: true,
+            level: Math.round(Number(battery.level) * 100),
+            charging: !!battery.charging,
+            chargingTime: Number(battery.chargingTime ?? -1),
+            dischargingTime: Number(battery.dischargingTime ?? -1),
+          };
+          this.shellUi?.scheduleRefresh();
+        };
+        sync();
+        for (const ev of ['levelchange', 'chargingchange', 'chargingtimechange', 'dischargingtimechange']) {
+          battery.addEventListener?.(ev, sync);
+        }
+      })
+      .catch(() => {
+        /* Battery Status API unavailable — keep the conservative defaults. */
+      });
+  }
+
+  battery() {
+    return { ...this.batteryState };
+  }
+
+  network(): boolean {
+    return this.online;
+  }
+
+  private initStorage() {
+    const nav = navigator as any;
+    if (typeof nav.storage?.estimate !== 'function') return;
+    nav.storage
+      .estimate()
+      .then((est: any) => {
+        this.storageQuota = {
+          supported: true,
+          usage: Number(est.usage ?? 0),
+          quota: Number(est.quota ?? 0),
+        };
+        this.shellUi?.scheduleRefresh();
+      })
+      .catch(() => {
+        /* Storage Manager unavailable. */
+      });
+  }
+
+  /** Real IndexedDB quota/usage: { supported, usage, quota } in bytes. */
+  storage(): { supported: boolean; usage: number; quota: number } {
+    return { ...this.storageQuota };
+  }
+
+  volume(): number {
+    return this.settings.get('muted') ? 0 : this.settings.get('volume');
+  }
+
+  setVolume(level: number) {
+    const v = Math.max(0, Math.min(100, Math.round(level)));
+    this.settings.patch({ volume: v, muted: v === 0 ? true : false });
+  }
+
+  toggleMute(): boolean {
+    const muted = !this.settings.get('muted');
+    this.settings.patch({ muted });
+    return muted;
+  }
+
+  /** Short two-tone chime whose loudness follows the system volume. */
+  chime(kind: 'notice' | 'error' = 'notice') {
+    const vol = this.volume();
+    if (vol <= 0) return;
+    try {
+      const Ctor = window.AudioContext ?? (window as any).webkitAudioContext;
+      if (!Ctor) return;
+      this.audioCtx ??= new Ctor();
+      const ctx = this.audioCtx;
+      if (ctx.state === 'suspended') void ctx.resume();
+      const gain = ctx.createGain();
+      const now = ctx.currentTime;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime((vol / 100) * 0.06, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.34);
+      gain.connect(ctx.destination);
+      const base = kind === 'error' ? 392 : 660;
+      for (const [i, freq] of [base, base * 1.5].entries()) {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        osc.start(now + i * 0.09);
+        osc.stop(now + 0.3 + i * 0.09);
+      }
+    } catch {
+      /* audio is a nicety; never let it break a notification */
+    }
   }
 
   /* --------------------------------------------------------------- boot */
 
   async boot(root: HTMLElement) {
     this.root = root;
+    this.seedSystemFiles();
+    this.loadCatalogs();
+    this.loadAppRegistry();
     const interp = new Interpreter();
     this.shellInterp = interp;
     const host = this.makeSystemHost();
@@ -113,6 +262,50 @@ export class Kernel implements KernelApi {
     const layer = root.querySelector('#window-layer') as HTMLElement | null;
     if (layer) this.wm.attach(layer);
     this.installShortcuts();
+    this.installFileDrop();
+    this.log('system', `boot ${this.version()}`);
+  }
+
+  /* -------------------------------------------------------- drag & drop */
+
+  /**
+   * Dragging files from the host computer onto the desktop imports them into
+   * ~/Downloads. Small text files are stored as text; anything else becomes a
+   * data URL so images and binaries survive the round-trip.
+   */
+  private installFileDrop() {
+    window.addEventListener('dragover', (e) => {
+      if (e.dataTransfer?.types?.includes('Files')) e.preventDefault();
+    });
+    window.addEventListener('drop', (e) => {
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+      e.preventDefault();
+      for (const file of Array.from(files)) {
+        this.importFile(file);
+      }
+    });
+  }
+
+  private importFile(file: File) {
+    const name = file.name || 'drop.bin';
+    const target = `/home/user/Downloads/${name}`;
+    const isText = /\.(txt|md|osl|oml|json|log|csv|tsv|html|css|js|ts|sh|py|xml|yml|yaml)$/i.test(name);
+    const finish = (content: string) => {
+      this.vfs.write(target, content);
+      this.notify(tr('Imported'), `${name} → ~/Downloads`, 'download');
+    };
+    if (isText && file.size < 1024 * 1024) {
+      const reader = new FileReader();
+      reader.onload = () => finish(String(reader.result ?? ''));
+      reader.onerror = () => this.notify(tr('Import failed'), name, 'alert');
+      reader.readAsText(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => finish(String(reader.result ?? ''));
+      reader.onerror = () => this.notify(tr('Import failed'), name, 'alert');
+      reader.readAsDataURL(file);
+    }
   }
 
   /* ------------------------------------------------------------ windows */
@@ -123,12 +316,13 @@ export class Kernel implements KernelApi {
       this.notify('OS', `Unknown application: ${appId}`, 'alert');
       return;
     }
+    const meta = this.metaFor(app);
     const win = this.wm.open({
       appId: app.id,
-      title: tr(app.name),
-      icon: app.icon,
-      width: app.width,
-      height: app.height,
+      title: tr(meta.name),
+      icon: meta.icon,
+      width: meta.width,
+      height: meta.height,
     });
 
     const args = new Map<string, any>();
@@ -174,7 +368,9 @@ export class Kernel implements KernelApi {
     win.onClose = () => {
       this.instances.delete(win.id);
       for (const t of timers) clearInterval(t);
+      this.log('app', `close ${app.id}`);
     };
+    this.log('app', `open ${app.id}`);
 
     try {
       interp.run(app.osl, interp.globals);
@@ -203,6 +399,7 @@ export class Kernel implements KernelApi {
   }
 
   private showAppError(win: ManagedWindow, err: any) {
+    this.log('error', String(err?.message ?? err));
     const box = document.createElement('div');
     box.className = 'app-error';
     box.innerHTML = `<b>Script error</b><pre>${escapeHtml(String(err?.stack ?? err?.message ?? err))}</pre>`;
@@ -232,7 +429,48 @@ export class Kernel implements KernelApi {
   }
 
   apps(): AppInfo[] {
-    return APPS.map((a) => ({ id: a.id, name: tr(a.name), icon: a.icon }));
+    return APPS.filter((a) => !this.metaFor(a).hidden).map((a) => {
+      const meta = this.metaFor(a);
+      return { id: a.id, name: tr(meta.name), icon: meta.icon };
+    });
+  }
+
+  /** Merged static app definition + /etc/apps.json overrides. */
+  private metaFor(app: AppDef) {
+    const m = this.appMeta.get(app.id) ?? {};
+    return {
+      name: typeof m.name === 'string' && m.name ? m.name : app.name,
+      icon: typeof m.icon === 'string' && m.icon ? m.icon : app.icon,
+      width: Number(m.width) > 0 ? Number(m.width) : app.width,
+      height: Number(m.height) > 0 ? Number(m.height) : app.height,
+      hidden: m.hidden === undefined ? !!app.hidden : !!m.hidden,
+    };
+  }
+
+  /** Reads /etc/apps.json, the editable application registry. */
+  private loadAppRegistry() {
+    this.appMeta.clear();
+    const p = '/etc/apps.json';
+    if (!this.vfs.exists(p)) return;
+    try {
+      const data = JSON.parse(this.vfs.read(p));
+      const list = Array.isArray(data) ? data : data?.apps;
+      if (Array.isArray(list)) {
+        for (const entry of list) {
+          if (entry && typeof entry.id === 'string') this.appMeta.set(entry.id, entry);
+        }
+      }
+    } catch (e: any) {
+      this.log('error', `apps.json: ${e?.message ?? e}`);
+    }
+  }
+
+  /** OSL `sys.reloadApps()`: re-reads the registry and repaints the shell. */
+  reloadApps() {
+    this.loadAppRegistry();
+    for (const inst of this.instances.values()) inst.ui.scheduleRefresh();
+    this.shellUi?.scheduleRefresh();
+    return true;
   }
 
   /* --------------------------------------------------------------- script */
@@ -255,16 +493,36 @@ export class Kernel implements KernelApi {
       interp.run(source, interp.globals, path);
       return { ok: true, output: lines.join('\n'), error: '' };
     } catch (e: any) {
-      return { ok: false, output: lines.join('\n'), error: String(e?.message ?? e) };
+      const error = String(e?.message ?? e);
+      this.log('error', error.split('\n')[0]);
+      return { ok: false, output: lines.join('\n'), error };
     }
+  }
+
+  /* --------------------------------------------------------------- logging */
+
+  log(level: string, message: string) {
+    this.logEntries.push({ id: ++this.logSeq, time: Date.now(), level, message: String(message) });
+    if (this.logEntries.length > 400) this.logEntries.splice(0, this.logEntries.length - 400);
+  }
+
+  logs(limit = 200) {
+    return this.logEntries.slice(-Math.max(1, limit));
+  }
+
+  clearLogs() {
+    this.logEntries = [];
   }
 
   /* ------------------------------------------------------- notifications */
 
   notify(title: string, body: string, icon = 'info') {
+    this.log('notice', `${title}: ${body}`);
+    if (!this.settings.get('notifications')) return;
     const id = ++this.notifSeq;
     this.notifs.push({ id, title, body, icon });
     if (this.notifs.length > 4) this.notifs.shift();
+    this.chime(icon === 'alert' || icon === 'error' ? 'error' : 'notice');
     this.shellUi?.scheduleRefresh();
     setTimeout(() => this.dismissNotification(id), 5600);
   }
@@ -429,7 +687,133 @@ export class Kernel implements KernelApi {
       prompt: (title, value, onOk) => this.overlays.prompt(title, value, onOk),
       toast: (message, icon) => this.notify('OS', message, icon ?? 'check'),
       menu: (items, onPick, x, y) => this.overlays.menu(items, onPick, x, y),
+      chooseImage: (onPick) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.style.display = 'none';
+        input.addEventListener('change', () => {
+          const file = input.files?.[0];
+          if (!file) {
+            input.remove();
+            onPick('');
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            input.remove();
+            onPick(String(reader.result ?? ''));
+          };
+          reader.onerror = () => {
+            input.remove();
+            onPick('');
+          };
+          reader.readAsDataURL(file);
+        });
+        document.body.appendChild(input);
+        input.click();
+      },
     };
+  }
+
+  /**
+   * Mirrors the system sources into the VFS so Files can browse them:
+   * app sources, the shell itself, dialogs and the language catalogues.
+   */
+  private seedSystemFiles() {
+    const marker = '/etc/apps-seed';
+    const version = '3';
+    if (this.vfs.exists(marker) && this.vfs.read(marker).trim() === version) return;
+    for (const d of [
+      '/usr',
+      '/usr/share',
+      '/usr/share/applications',
+      '/usr/share/apps',
+      '/usr/share/os',
+      '/usr/share/i18n',
+    ]) {
+      this.vfs.mkdir(d, true, true);
+    }
+    for (const app of APPS) {
+      const dir = `/usr/share/apps/${app.id}`;
+      this.vfs.mkdir(dir, true, true);
+      this.vfs.write(`${dir}/${app.id}.osl`, app.osl);
+      this.vfs.write(`${dir}/${app.id}.oml`, app.oml);
+      this.vfs.write(
+        `${dir}/app.json`,
+        JSON.stringify(
+          { id: app.id, name: app.name, icon: app.icon, width: app.width, height: app.height, hidden: !!app.hidden },
+          null,
+          2,
+        ),
+      );
+      this.vfs.write(`/usr/share/applications/${app.id}.desktop`, `${app.id}\n`);
+    }
+    // The editable app registry. Kept if it already exists so user edits survive.
+    if (!this.vfs.exists('/etc/apps.json')) {
+      this.vfs.write(
+        '/etc/apps.json',
+        JSON.stringify(
+          {
+            version: 1,
+            note: 'Application registry. name/icon/width/height/hidden can be overridden; call sys.reloadApps() after editing.',
+            apps: APPS.map((a) => ({
+              id: a.id,
+              name: a.name,
+              icon: a.icon,
+              width: a.width,
+              height: a.height,
+              hidden: !!a.hidden,
+            })),
+          },
+          null,
+          2,
+        ),
+      );
+    }
+    this.vfs.write(
+      '/usr/share/apps/README.md',
+      `# System applications\n\nEvery built-in app lives here as a pair of files://n//n- \`<app>.oml\` — the interface, described in OML\n- \`<app>.osl\` — the behaviour, written in OSL\n\nLaunch entries live in \`/usr/share/applications/*.desktop\`.\nEditing these copies does not change the running apps; copy them into\n\`~/Projects\` to experiment.\n`,
+    );
+    // The shell is just another pair of OSL/OML files.
+    this.vfs.write('/usr/share/os/shell.osl', shellOsl);
+    this.vfs.write('/usr/share/os/shell.oml', shellOml);
+    this.vfs.write('/usr/share/os/dialog.oml', dialogOml);
+    this.vfs.write('/usr/share/os/menu.oml', menuOml);
+    this.vfs.write(
+      '/usr/share/os/README.md',
+      `# System sources\n\n- \`shell.osl\` / \`shell.oml\` — the desktop, taskbar and dock\n- \`dialog.oml\` / \`menu.oml\` — dialogs and context menus\n- \`/usr/share/apps/<id>/\` — one folder per application\n- \`/usr/share/i18n/*.json\` — UI translations\n\nUse \`i18n.reload()\` in OSL to re-read the catalogues after editing them.\n`,
+    );
+    // Never clobber translations a user may have edited by hand.
+    for (const lang of ['en', 'zh'] as Lang[]) {
+      const p = `/usr/share/i18n/${lang}.json`;
+      if (!this.vfs.exists(p)) this.vfs.write(p, catalogJson(lang));
+    }
+    this.vfs.write(marker, version);
+  }
+
+  /** Loads /usr/share/i18n/*.json over the bundled catalogues. */
+  private loadCatalogs() {
+    for (const lang of ['en', 'zh'] as Lang[]) {
+      const p = `/usr/share/i18n/${lang}.json`;
+      if (!this.vfs.exists(p)) continue;
+      try {
+        const data = JSON.parse(this.vfs.read(p));
+        // Merge over the bundled catalogue: installs created before a new key
+        // was added still get the new translation instead of the raw English id.
+        if (data && typeof data === 'object' && !Array.isArray(data)) setCatalog(lang, { ...catalogFor(lang), ...data });
+      } catch (e: any) {
+        this.log('error', `i18n ${lang}: ${e?.message ?? e}`);
+      }
+    }
+  }
+
+  /** OSL `i18n.reload()`: re-reads the VFS catalogues and repaints the UI. */
+  reloadI18n() {
+    this.loadCatalogs();
+    for (const inst of this.instances.values()) inst.ui.scheduleRefresh();
+    this.shellUi?.scheduleRefresh();
+    return true;
   }
 
   private makeWindowHandle(win: ManagedWindow): WindowHandle {
@@ -442,6 +826,10 @@ export class Kernel implements KernelApi {
       restore: () => this.wm.restore(win),
       toggleMax: () => this.wm.toggleMax(win),
       setSize: (w, h) => this.wm.setSize(win, w, h),
+      move: (x, y) => this.wm.move(win, x, y),
+      center: () => this.wm.center(win),
+      toggleFullscreen: () => this.wm.toggleFullscreen(win),
+      isFullscreen: () => win.fullscreen,
       isMaximized: () => win.maximized,
     };
   }
@@ -456,6 +844,10 @@ export class Kernel implements KernelApi {
       restore: () => {},
       toggleMax: () => {},
       setSize: () => {},
+      move: () => {},
+      center: () => {},
+      toggleFullscreen: () => {},
+      isFullscreen: () => false,
       isMaximized: () => false,
     };
     const host: Host = {
@@ -471,6 +863,7 @@ export class Kernel implements KernelApi {
         prompt: (t, v, cb) => this.overlays.prompt(t, v, cb),
         toast: (m, i) => this.notify('OS', m, i),
         menu: (items, cb, x, y) => this.overlays.menu(items, cb, x, y),
+        chooseImage: (onPick) => this.uiBridge().chooseImage(onPick),
       },
       refresh: () => {},
       every: () => {},
@@ -509,6 +902,11 @@ export class Kernel implements KernelApi {
         this.open('ide');
         return;
       }
+      if (e.altKey && e.key === 'F2') {
+        e.preventDefault();
+        this.open('run');
+        return;
+      }
       if (mod && e.code === 'Space' && !typing) {
         e.preventDefault();
         this.toggleStart();
@@ -525,6 +923,7 @@ export class Kernel implements KernelApi {
         } catch {
           /* ignore */
         }
+        this.wm.exitFullscreenActive();
       }
     });
 

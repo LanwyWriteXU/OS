@@ -1,0 +1,69 @@
+# clock.osl — analog clock, digital readout and a stopwatch.
+
+let now = time.now()
+let hourDeg = 0
+let minDeg = 0
+let secDeg = 0
+let timeText = ""
+let dateText = ""
+let ticks = []
+let swRunning = False
+let swStart = 0
+let swElapsed = 0
+let swText = "00:00.0"
+
+fn pad2(n):
+    if n < 10:
+        return "0" + str(n)
+    return str(n)
+
+fn buildTicks():
+    let out = []
+    let i = 0
+    while i < 12:
+        out.append({"deg": i * 30, "key": str(i)})
+        i += 1
+    ticks = out
+
+fn fmtStop(ms):
+    let total = math.floor(ms / 100)
+    let tenths = total % 10
+    let secs = math.floor(total / 10)
+    let m = math.floor(secs / 60)
+    let s = secs % 60
+    return pad2(m) + ":" + pad2(s) + "." + str(tenths)
+
+fn tick():
+    now = time.now()
+    let p = time.parts(now)
+    let h = p.get("hours")
+    let mi = p.get("minutes")
+    let se = p.get("seconds")
+    hourDeg = (h % 12) * 30 + mi * 0.5
+    minDeg = mi * 6 + se * 0.1
+    secDeg = se * 6
+    timeText = time.format(now, "HH:mm:ss")
+    dateText = time.intl(now, "full")
+    if swRunning:
+        swText = fmtStop(now - swStart + swElapsed)
+    refresh()
+
+every(200, tick)
+
+fn toggleStop():
+    if swRunning:
+        swElapsed += time.now() - swStart
+        swRunning = False
+    else:
+        swStart = time.now()
+        swRunning = True
+    refresh()
+
+fn resetStop():
+    swRunning = False
+    swElapsed = 0
+    swText = "00:00.0"
+    refresh()
+
+buildTicks()
+tick()

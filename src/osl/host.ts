@@ -38,6 +38,10 @@ export interface WindowHandle {
   restore(): void;
   toggleMax(): void;
   setSize(w: number, h: number): void;
+  move(x: number, y: number): void;
+  center(): void;
+  toggleFullscreen(): void;
+  isFullscreen(): boolean;
   isMaximized(): boolean;
 }
 
@@ -47,6 +51,8 @@ export interface UiBridge {
   prompt(title: string, value: string, onOk: any): void;
   toast(message: string, icon?: string): void;
   menu(items: any[], onPick: any, x?: number, y?: number): void;
+  /** Opens a native image picker; `onPick` receives a data URL or ''. */
+  chooseImage(onPick: (dataUrl: string) => void): void;
 }
 
 export interface ScriptResult {
@@ -76,6 +82,28 @@ export interface KernelApi {
   factoryReset(): void;
   /** Runs OSL source in an isolated interpreter and captures its output. */
   runScript(source: string, path?: string): ScriptResult;
+  /** System log ring buffer. */
+  log(level: string, message: string): void;
+  logs(limit?: number): LogEntry[];
+  clearLogs(): void;
+  /** Re-reads the VFS language catalogues. */
+  reloadI18n(): boolean;
+  /** Re-reads /etc/apps.json. */
+  reloadApps(): boolean;
+  /** Real battery state from the Battery Status API (percent 0–100). */
+  battery(): { supported: boolean; level: number; charging: boolean; chargingTime: number; dischargingTime: number };
+  storage(): { supported: boolean; usage: number; quota: number };
+  network(): boolean;
+  volume(): number;
+  setVolume(level: number): void;
+  toggleMute(): boolean;
+}
+
+export interface LogEntry {
+  id: number;
+  time: number;
+  level: string;
+  message: string;
 }
 
 export interface Host {

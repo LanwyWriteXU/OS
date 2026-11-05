@@ -7,28 +7,62 @@ let s = sys.settings()
 let theme = s.get("theme")
 let style = s.get("style")
 let wallpaper = s.get("wallpaper")
+let wallpaperPath = s.get("wallpaperPath")
+let wallThumb = ""
 let accent = s.get("accent")
 let animations = s.get("animations")
 let clock24 = s.get("clock24")
 let user = s.get("user")
 let uiLang = s.get("lang")
+let clockSeconds = s.get("clockSeconds")
+let deskIconSize = s.get("deskIconSize")
+let deskSnap = s.get("deskSnap")
+let taskbarTop = s.get("taskbarTop")
+let transparency = s.get("transparency")
+let showHidden = s.get("showHidden")
+let termFont = s.get("termFont")
+let codeFont = s.get("codeFont")
+let weekStart = s.get("weekStart")
+let notifications = s.get("notifications")
 let wallpapers = ["aurora", "void", "dune", "mint", "sunset", "graphite", "nebula", "forest"]
 let accents = ["#5aa9ff", "#8b7cff", "#34d399", "#fbbf24", "#fb7185", "#22d3ee"]
 let langs = [
     {"id": "en", "name": "English"},
     {"id": "zh", "name": "简体中文"},
 ]
+let iconSizes = [
+    {"value": 36, "name": "Small"},
+    {"value": 44, "name": "Medium"},
+    {"value": 52, "name": "Large"},
+]
+let textSizes = [
+    {"value": 11.5, "name": "S"},
+    {"value": 12.5, "name": "M"},
+    {"value": 14, "name": "L"},
+]
 let sizeText = "0 B"
 let fileCount = 0
 let percent = 0
 let sysline = ""
+let quotaText = ""
+let quotaRaw = 0
 
 fn onRefresh():
+    if wallpaperPath != "" and fs.exists(wallpaperPath):
+        wallThumb = fs.read(wallpaperPath)
     let size = fs.size("/")
     sizeText = fs.sizeText(size)
     fileCount = fs.count("/")
-    percent = math.round(size / 8388608 * 100)
-    sysline = "OS 1.0 Origin · OSL 1.0 · OML 1.0 · " + str(navigatorCores()) + " cores"
+    let st = sys.storage()
+    if st.get("supported"):
+        quotaRaw = st.get("quota")
+        quotaText = fs.sizeText(quotaRaw)
+        percent = math.round(size / quotaRaw * 100)
+    else:
+        quotaRaw = 0
+        quotaText = "?"
+        percent = 0
+    sysline = "OS 1.1 Origin · OSL 1.1 · OML 1.1 · " + str(navigatorCores()) + " cores"
 
 fn navigatorCores():
     return 8
@@ -40,6 +74,31 @@ fn go(name):
 fn setLang(v):
     uiLang = v
     sys.setSetting("lang", v)
+    refresh()
+
+fn uploadWall():
+    ui.chooseImage(wallChosen)
+
+fn wallChosen(dataUrl):
+    if dataUrl == "":
+        return
+    let ext = "png"
+    if dataUrl.find("image/jpeg") >= 0:
+        ext = "jpg"
+    elif dataUrl.find("image/webp") >= 0:
+        ext = "webp"
+    let p = "/home/user/Pictures/wallpaper." + ext
+    fs.write(p, dataUrl)
+    wallpaperPath = p
+    wallpaper = "custom"
+    sys.setSetting("wallpaperPath", p)
+    sys.setSetting("wallpaper", "custom")
+    ui.toast(t("Wallpaper updated"), "image")
+    refresh()
+
+fn clearWall():
+    wallpaper = "aurora"
+    sys.setSetting("wallpaper", "aurora")
     refresh()
 
 fn setWall(w):
@@ -60,6 +119,51 @@ fn setTheme(v):
 fn setStyle(v):
     style = v
     sys.setSetting("style", v)
+    refresh()
+
+fn applyDeskSnap():
+    sys.setSetting("deskSnap", deskSnap)
+    refresh()
+
+fn setIconSize(v):
+    deskIconSize = v
+    sys.setSetting("deskIconSize", v)
+    refresh()
+
+fn setTaskbar(v):
+    taskbarTop = v
+    sys.setSetting("taskbarTop", v)
+    refresh()
+
+fn applyTransparency():
+    sys.setSetting("transparency", transparency)
+    refresh()
+
+fn applyShowHidden():
+    sys.setSetting("showHidden", showHidden)
+    refresh()
+
+fn setTermFont(v):
+    termFont = v
+    sys.setSetting("termFont", v)
+    refresh()
+
+fn setCodeFont(v):
+    codeFont = v
+    sys.setSetting("codeFont", v)
+    refresh()
+
+fn setWeekStart(v):
+    weekStart = v
+    sys.setSetting("weekStart", v)
+    refresh()
+
+fn applyClockSeconds():
+    sys.setSetting("clockSeconds", clockSeconds)
+    refresh()
+
+fn applyNotifications():
+    sys.setSetting("notifications", notifications)
     refresh()
 
 fn applyAnimations():

@@ -1,0 +1,102 @@
+# tasks.osl — a persistent to-do list stored in ~/Documents/tasks.json
+
+let file = "/home/user/Documents/tasks.json"
+let items = []
+let filter = "open"
+let draft = ""
+let seq = 1
+
+fn load():
+    if fs.exists(file):
+        try:
+            items = fs.readJson(file)
+        except e:
+            items = []
+    else:
+        items = []
+    for it in items:
+        if it.get("id") >= seq:
+            seq = it.get("id") + 1
+    if len(items) == 0:
+        seed()
+
+fn seed():
+    items = [
+        {"id": 1, "title": "Read the OSL language guide", "done": False, "priority": "high"},
+        {"id": 2, "title": "Try the IDE (Ctrl+Alt+I)", "done": False, "priority": "normal"},
+        {"id": 3, "title": "Customise the desktop in Settings", "done": True, "priority": "low"},
+    ]
+    seq = 4
+    save()
+
+fn save():
+    fs.writeJson(file, items)
+
+fn add():
+    let title = draft.strip()
+    if title == "":
+        return
+    items.append({"id": seq, "title": title, "done": False, "priority": "normal"})
+    seq += 1
+    draft = ""
+    save()
+    refresh()
+
+fn onKey(e):
+    if e.key == "Enter":
+        e.prevent()
+        add()
+
+fn toggle(it):
+    it.set("done", not it.get("done"))
+    save()
+    refresh()
+
+fn removeItem(it):
+    let out = []
+    for x in items:
+        if x.get("id") != it.get("id"):
+            out.append(x)
+    items = out
+    save()
+    refresh()
+
+fn clearDone():
+    let out = []
+    for x in items:
+        if not x.get("done"):
+            out.append(x)
+    if len(out) == len(items):
+        ui.toast(t("Nothing to clear"), "alert")
+        return
+    items = out
+    save()
+    refresh()
+
+fn setFilter(f):
+    filter = f
+    refresh()
+
+fn openCount():
+    let n = 0
+    for x in items:
+        if not x.get("done"):
+            n += 1
+    return n
+
+fn visible():
+    let out = []
+    for x in items:
+        if filter == "all":
+            out.append(x)
+        elif filter == "open" and not x.get("done"):
+            out.append(x)
+        elif filter == "done" and x.get("done"):
+            out.append(x)
+    return out
+
+fn onRefresh():
+    win.setTitle(t("Tasks") + " — " + str(len(items)))
+
+load()
+onRefresh()

@@ -1,0 +1,26 @@
+<Window title="Run" icon="command">
+  <VBox class="run">
+    <HBox class="run-head">
+      <Icon name="command" size="18"/>
+      <Label text="{t('Type the name of an app or a path')}"/>
+    </HBox>
+    <Input class="run-input" bind="query" placeholder="files, notes, /home/user/Projects…" focus="true" oninput="rebuild()" onkeydown="onKey(event)"/>
+    <Scroll class="run-list" flex="1">
+      <For each="hits" as="h" key="h.key">
+        <Button class="run-row {sel == h.key ? 'on' : ''}" onclick="pick(h)">
+          <Icon name="{h.icon}" size="18"/>
+          <VBox class="run-info" flex="1">
+            <Label class="run-name" text="{h.name}"/>
+            <Label class="run-detail" text="{h.detail}"/>
+          </VBox>
+          <Label class="run-kind" text="{h.kind}"/>
+        </Button>
+      </For>
+      <Label class="run-empty" if="{len(hits) == 0}" text="{t('No matches')}"/>
+    </Scroll>
+    <HBox class="run-foot">
+      <Label class="run-hint" text="{t('Enter to run · Esc to close')}" flex="1"/>
+      <Button variant="primary" text="{t('Run')}" onclick="run()"/>
+    </HBox>
+  </VBox>
+</Window>

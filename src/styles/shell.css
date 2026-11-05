@@ -7,21 +7,17 @@
 /* ---------------- desktop icons ---------------- */
 .desk-icons {
   position: absolute;
-  top: 14px;
-  left: 14px;
-  bottom: 14px;
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(auto-fill, 98px);
-  align-content: start;
-  gap: 4px;
+  inset: 0;
   z-index: 1;
   pointer-events: none;
 }
 .desk-icon { pointer-events: auto; }
 .desk-icon {
-  width: 88px;
-  height: 94px;
+  position: absolute;
+  left: 14px;
+  top: 18px;
+  width: calc(var(--desk-icon, 44px) + 44px);
+  height: calc(var(--desk-icon, 44px) + 50px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -36,7 +32,8 @@
 }
 .desk-icon:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.14); }
 .desk-icon.sel { background: rgba(90, 169, 255, 0.28); border-color: rgba(90, 169, 255, 0.5); }
-.desk-icon img, .desk-icon svg { width: 42px; height: 42px; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35)); }
+.desk-icon.dragging { opacity: 0.4; }
+.desk-icon img, .desk-icon svg { width: 100%; height: 100%; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35)); }
 .desk-icon span {
   font-size: 11.5px;
   line-height: 1.25;
@@ -120,11 +117,11 @@
 /* ---------------- start menu ---------------- */
 .start-menu {
   position: absolute;
-  left: 50%;
+  left: 8px;
   bottom: 56px;
-  transform: translateX(-50%);
   width: 560px;
-  max-height: min(620px, calc(100% - 90px));
+  height: 560px;
+  max-height: min(560px, calc(100% - 90px));
   background: var(--surface-glass);
   backdrop-filter: blur(34px) saturate(1.7);
   -webkit-backdrop-filter: blur(34px) saturate(1.7);
@@ -138,7 +135,9 @@
   z-index: 600;
   animation: startIn 0.18s var(--ease);
 }
-@keyframes startIn { from { opacity: 0; transform: translateX(-50%) translateY(12px) scale(0.985); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+.start-menu.closing { animation: startOut 0.14s var(--ease) forwards; }
+@keyframes startIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes startOut { to { opacity: 0; transform: translateY(10px) scale(0.98); } }
 .start-search { display: flex; }
 .start-section { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text); padding: 2px 4px; }
 .start-section span { font-size: 11px; color: var(--muted); font-weight: 500; cursor: pointer; }
@@ -260,6 +259,8 @@ body[data-theme="light"] .dock { background: rgba(255, 255, 255, 0.5); border-co
 .win.closing { animation: winOut 0.14s ease forwards; pointer-events: none; }
 @keyframes winOut { to { opacity: 0; transform: scale(0.96); } }
 .win.minimized { opacity: 0; transform: scale(0.8) translateY(60px); pointer-events: none; transition: opacity 0.16s, transform 0.2s var(--ease); }
+.win.minimizing { transition: transform 0.2s var(--ease), opacity 0.2s var(--ease); pointer-events: none; }
+.win.restoring { transition: transform 0.28s var(--ease), opacity 0.22s var(--ease); }
 .win.maximized { border-radius: 0; border-color: transparent; }
 .win.snapped { border-radius: 8px; }
 
@@ -304,8 +305,20 @@ body[data-style="mac"] .win-btn svg { display: none; }
 body[data-style="mac"] .win-btn.close { background: #ff5f57; }
 body[data-style="mac"] .win-btn.min { background: #febc2e; }
 body[data-style="mac"] .win-btn.max { background: #28c840; }
-body[data-style="mac"] .win-btn:hover { filter: brightness(1.08); background-color: inherit; }
+body[data-style="mac"] .win-btn { position: relative; }
+body[data-style="mac"] .win-btn:hover { filter: brightness(1.12); }
 body[data-style="mac"] .win-btn.close:hover { background: #ff5f57; color: inherit; }
+body[data-style="mac"] .win-btn.min:hover { background: #febc2e; color: inherit; }
+body[data-style="mac"] .win-btn.max:hover { background: #28c840; color: inherit; }
+body[data-style="mac"] .win-btn::after {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; line-height: 1; color: rgba(0, 0, 0, 0.55);
+  opacity: 0; transition: opacity 0.12s ease; pointer-events: none;
+}
+body[data-style="mac"] .win-btns:hover .win-btn::after { opacity: 1; }
+body[data-style="mac"] .win-btn.close::after { content: "×"; }
+body[data-style="mac"] .win-btn.min::after { content: "−"; }
+body[data-style="mac"] .win-btn.max::after { content: "+"; }
 
 /* resize handles */
 .rz { position: absolute; z-index: 5; }
@@ -471,7 +484,7 @@ body[data-style="mac"] .win-btns { flex-direction: row; }
 body[data-style="mac"] .win-btn.min { order: 2; }
 body[data-style="mac"] .win-btn.max { order: 3; }
 body[data-style="mac"] .win-btn.close { order: 1; }
-.start-menu.mac { bottom: auto; top: 40px; width: 540px; }
+.start-menu.mac { bottom: auto; top: 40px; left: calc(50% - 332px); width: 540px; }
 
 /* ---------------- two-column start menu ---------------- */
 .start-menu.two-col {
@@ -538,11 +551,142 @@ body[data-style="mac"] .win-btn.close { order: 1; }
 .sm-foot { align-items: center; gap: 8px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
 .start-menu.mac.two-col { width: 664px; top: 36px; }
 
-/* the desktop icon layer is a real column-first grid */
-.desk-icons {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(auto-fill, 98px);
-  align-content: start;
-  justify-content: start;
+/* icons are absolutely positioned; the shell script owns their coordinates */
+
+
+/* ---------------- window transitions & full screen ---------------- */
+.win.animating {
+  transition:
+    left 0.2s var(--ease),
+    top 0.2s var(--ease),
+    width 0.2s var(--ease),
+    height 0.2s var(--ease);
 }
+.win.fullscreen {
+  position: fixed;
+  inset: 0;
+  left: 0 !important;
+  top: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 0;
+  border-color: transparent;
+  box-shadow: none;
+  z-index: 9000;
+  animation: fullscreenIn 0.22s var(--ease);
+}
+.win.fullscreen .rz { display: none; }
+@keyframes fullscreenIn {
+  from { opacity: 0.55; transform: scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+body.in-fullscreen .taskbar,
+body.in-fullscreen .dock-wrap,
+body.in-fullscreen .menubar { display: none; }
+
+/* ---------------- tray panel ---------------- */
+.tray-panel {
+  position: absolute;
+  right: 10px;
+  bottom: 56px;
+  width: 268px;
+  z-index: 60;
+  padding: 12px 14px;
+  gap: 6px;
+  background: var(--surface-glass);
+  backdrop-filter: blur(30px) saturate(1.7);
+  -webkit-backdrop-filter: blur(30px) saturate(1.7);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  animation: trayIn 0.16s var(--ease);
+}
+@keyframes trayIn { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+body[data-taskbar="top"] .tray-panel { bottom: auto; top: 56px; }
+.tray-h {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted); font-weight: 600; padding: 2px 0;
+}
+.tray-row { align-items: center; gap: 8px; min-height: 26px; }
+.tray-row .ui-icon { color: var(--muted); flex: none; }
+.tray-row .ui-label { font-size: 12px; }
+.tray-row .ui-slider { flex: 1; }
+.tray-val { font-family: var(--mono); font-size: 11px; color: var(--muted); min-width: 40px; text-align: right; }
+.tray-note { font-size: 10.5px; color: var(--muted); }
+.tray-actions { padding-top: 2px; }
+.tray-actions .ui-btn { width: 100%; justify-content: flex-start; }
+
+.tb-btn.pinned { opacity: 0.85; }
+.tb-btn.pinned:hover { opacity: 1; }
+.tb-btn .tb-dot { display: none; }
+.tb-btn:not(.pinned) .tb-dot { display: block; }
+
+.dock-app.dock-min { width: 38px; height: 38px; }
+.dock-app.dock-min svg { width: 32px; height: 32px; opacity: 0.85; }
+.dock-app.dock-min::before {
+  content: ""; position: absolute; inset: 4px; border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+}
+
+/* desktop icon labels need to stay readable on pale wallpapers */
+body[data-theme="light"] .desk-icon { color: #16202e; }
+body[data-theme="light"] .desk-icon span { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.85); }
+body[data-theme="light"] .desk-icon:hover { background: rgba(255, 255, 255, 0.55); border-color: rgba(15, 23, 42, 0.12); }
+body[data-theme="light"] .desk-icon.sel { background: rgba(90, 169, 255, 0.22); border-color: rgba(90, 169, 255, 0.45); }
+
+/* the mac launcher stays centred, the Windows menu hugs the start button */
+.start-menu.mac { left: calc(50% - 332px); transform: none; }
+.start-menu.mac.two-col { left: calc(50% - 332px); }
+
+/* grouped taskbar buttons */
+.tb-btn .tb-count {
+  position: absolute; right: 0; top: 0;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px; background: color-mix(in srgb, var(--accent) 82%, #000 8%);
+  border: 1px solid color-mix(in srgb, var(--surface) 70%, transparent);
+  color: #fff; font-size: 10px; line-height: 1; font-weight: 600;
+  pointer-events: none;
+}
+.tb-btn.dragging { opacity: 0.35; }
+
+/* the Start button gets its own four-pane mark, not an app icon */
+.tb-start { color: var(--accent); }
+.tb-start svg { width: 20px; height: 20px; }
+.tb-start:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+/* ---------------- grouped window preview ---------------- */
+.win-preview {
+  position: absolute;
+  bottom: 56px;
+  width: 280px;
+  z-index: 70;
+  padding: 8px;
+  gap: 2px;
+  background: var(--surface-glass);
+  backdrop-filter: blur(30px) saturate(1.7);
+  -webkit-backdrop-filter: blur(30px) saturate(1.7);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  animation: trayIn 0.14s var(--ease);
+}
+body[data-taskbar="top"] .win-preview { bottom: auto; top: 56px; }
+.wp-head {
+  align-items: center; gap: 8px; padding: 2px 6px 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 3px;
+}
+.wp-head .ui-label { font-size: 11.5px; font-weight: 600; flex: 1; }
+.wp-count { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.wp-row {
+  width: 100%; height: 32px; justify-content: flex-start; gap: 8px;
+  padding: 0 6px; border-radius: 6px; background: transparent; border-color: transparent;
+}
+.wp-row:hover { background: var(--hover); }
+.wp-row.on { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.wp-row .ui-icon { color: var(--muted); flex: none; }
+.wp-title { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.wp-idx { font-family: var(--mono); font-size: 10px; color: var(--muted); flex: none; }
+.wp-min { font-size: 9.5px; color: var(--muted); }
+.wp-head .ui-iconbtn { width: 22px; height: 22px; }
