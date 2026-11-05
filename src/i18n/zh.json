@@ -316,5 +316,10 @@
   "Imported": "已导入",
   "Import failed": "导入失败",
   "Open with": "打开方式",
-  "Click to launch": "点击启动"
+  "Click to launch": "点击启动",
+  "Edit": "编辑",
+  "Discard unsaved changes?": "放弃未保存的修改？",
+  "Open file": "打开文件",
+  "Choose a file to open": "选择要打开的文件",
+  "New Note": "新建便签"
 }

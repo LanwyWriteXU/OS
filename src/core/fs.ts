@@ -121,12 +121,11 @@ export class Vfs {
     const dir = '/home/user/Desktop';
     this.mkdir(dir, true, true);
     const marker = '/etc/desktop-seed';
-    const version = '4';
+    const version = '5';
     if (this.exists(marker) && this.read(marker).trim() === version) return;
     const shortcuts: Array<[string, string]> = [
       ['Files.desktop', 'files'],
       ['Terminal.desktop', 'terminal'],
-      ['Editor.desktop', 'editor'],
       ['IDE.desktop', 'ide'],
       ['Notes.desktop', 'notes'],
       ['Settings.desktop', 'settings'],
@@ -134,6 +133,11 @@ export class Vfs {
     for (const [name, id] of shortcuts) {
       const p = `${dir}/${name}`;
       if (!this.exists(p)) this.write(p, id);
+    }
+    // Editor/Preview merged into Notes; drop their stale desktop shortcuts.
+    for (const stale of ['Editor.desktop']) {
+      const p = `${dir}/${stale}`;
+      if (this.exists(p)) this.remove(p);
     }
     if (!this.exists(`${dir}/Read me.md`)) this.write(`${dir}/Read me.md`, DESKTOP_README);
     this.write(marker, version);

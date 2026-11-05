@@ -71,7 +71,7 @@ const DEFAULTS: Settings = {
   volume: 62,
   muted: false,
   pinned: ['files', 'terminal', 'ide', 'notes', 'settings'],
-  dockPinned: ['files', 'terminal', 'ide', 'editor', 'tasks', 'preview', 'settings'],
+  dockPinned: ['files', 'terminal', 'ide', 'notes', 'tasks', 'settings'],
   wallpaperPath: '',
 };
 
@@ -91,6 +91,9 @@ export class SettingsStore {
       // Arrays can arrive as null from older builds.
       if (!Array.isArray(this.value.pinned)) this.value.pinned = [...DEFAULTS.pinned];
       if (!Array.isArray(this.value.dockPinned)) this.value.dockPinned = [...DEFAULTS.dockPinned];
+      // Editor/Preview merged into Notes — drop them from any saved lists.
+      this.value.pinned = this.value.pinned.filter((id) => id !== 'editor' && id !== 'preview');
+      this.value.dockPinned = this.value.dockPinned.filter((id) => id !== 'editor' && id !== 'preview');
     } catch {
       this.value = { ...DEFAULTS };
     }

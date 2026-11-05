@@ -34,7 +34,7 @@ async function main() {
   const firstRun = !localStorage.getItem('os.seen');
   if (firstRun) {
     localStorage.setItem('os.seen', '1');
-    setTimeout(() => kernel.open('editor', { path: '/home/user/Documents/welcome.md' }), 450);
+    setTimeout(() => kernel.open('notes', { path: '/home/user/Documents/welcome.md' }), 450);
     setTimeout(
       () => kernel.notify(t('Welcome to OS'), t('Press Ctrl+Space for the start menu, or open Terminal and run fastfetch.'), 'sparkles'),
       1500,

@@ -742,7 +742,7 @@ def('open', 'Open an app or a file', 'open <app|path> [path]', (ctx) => {
 def('edit', 'Open a file in the editor', 'edit <file>', (ctx) => {
   if (!ctx.argv[0]) return { err: 'edit: missing file operand', code: 1 };
   const p = ctx.term.resolve(ctx.argv[0]);
-  ctx.term.host.kernel.open('editor', { path: p });
+  ctx.term.host.kernel.open('notes', { path: p });
   return {};
 });
 

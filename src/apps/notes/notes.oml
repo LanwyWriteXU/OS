@@ -25,15 +25,58 @@
     <VBox class="notes-main" flex="1">
       <HBox class="notes-bar">
         <Button icon="file-plus" text="New" onclick="newNote()"/>
+        <Button icon="folder" text="Open" onclick="openPicker()"/>
         <Button icon="save" text="Save" variant="primary" onclick="save()"/>
         <Spacer/>
+        <Button icon="book" text="{previewMode ? t('Edit') : t('Preview')}" variant="ghost" onclick="togglePreview()"/>
         <IconButton icon="trash" title="Delete note" onclick="deleteNote()"/>
       </HBox>
-      <TextArea class="notes-area" bind="text" flex="1" oninput="onEdit()" spellcheck="false" placeholder="Write something…"/>
+      <TextArea class="notes-area" bind="text" flex="1" if="{!previewMode}" oninput="onEdit()" onkeydown="onKey(event)" spellcheck="false" placeholder="Write something…"/>
+      <Scroll class="notes-preview" flex="1" if="{previewMode}">
+        <VBox class="md">
+          <For each="blocks" as="b" index="i" key="i">
+            <Label class="md-h1" text="{b.text}" if="{b.kind == 'h1'}"/>
+            <Label class="md-h2" text="{b.text}" if="{b.kind == 'h2'}"/>
+            <Label class="md-h3" text="{b.text}" if="{b.kind == 'h3'}"/>
+            <Label class="md-p" text="{b.text}" if="{b.kind == 'p'}"/>
+            <HBox class="md-li" if="{b.kind == 'li'}">
+              <Div class="md-dot"/>
+              <Label text="{b.text}" flex="1"/>
+            </HBox>
+            <VBox class="md-code" if="{b.kind == 'code'}">
+              <Label text="{b.text}"/>
+            </VBox>
+            <Divider if="{b.kind == 'hr'}"/>
+          </For>
+        </VBox>
+      </Scroll>
       <HBox class="notes-status">
         <Label text="{statusText}" flex="1"/>
         <Label text="{t('{0} words · {1} chars', words, chars)}"/>
       </HBox>
     </VBox>
   </HBox>
+
+  <VBox class="picker-mask" if="{pickerOpen}">
+    <VBox class="picker">
+      <HBox class="picker-head">
+        <Icon name="folder" size="16"/>
+        <Label class="picker-path" text="{pickerTitle()}" flex="1"/>
+        <IconButton icon="x" title="Close" onclick="closePicker()"/>
+      </HBox>
+      <Scroll class="picker-list" flex="1">
+        <For each="pickerItems()" as="f">
+          <Button class="picker-item" onclick="pickEntry(f)">
+            <Icon name="{f.type == 'dir' ? 'folder' : 'file-text'}" size="18"/>
+            <Label class="picker-name" text="{f.name}" flex="1"/>
+            <Label class="picker-size" text="{f.type == 'dir' ? '' : fs.sizeText(f.size)}"/>
+          </Button>
+        </For>
+      </Scroll>
+      <HBox class="picker-foot">
+        <Label class="picker-hint" text="Choose a file to open" flex="1"/>
+        <Button text="Cancel" onclick="closePicker()"/>
+      </HBox>
+    </VBox>
+  </VBox>
 </Window>

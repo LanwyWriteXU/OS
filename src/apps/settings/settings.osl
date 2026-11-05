@@ -194,7 +194,7 @@ fn openGuide():
     sys.openPath("/home/user/Documents/welcome.md")
 
 fn openSample():
-    sys.open("editor", {"path": "/home/user/Projects/hello.osl"})
+    sys.open("notes", {"path": "/home/user/Projects/hello.osl"})
 
 fn confirmReset():
     ui.confirm(t("Reset the whole file system to its original state?\nAll of your files will be deleted."), doReset, t("Factory reset"))

@@ -57,6 +57,7 @@ let previewX = 12
 let previewHeld = False
 let previewPending = False
 let previewToken = 0
+let pendingToken = 0
 
 # ---------------------------------------------------------------- refresh
 
@@ -564,13 +565,11 @@ fn previewShow(item, e):
         previewHeld = False
 
 fn previewHide():
-    let token = previewToken
-    after(180, fn():
-        previewMaybeHide(token)
-    )
+    pendingToken = previewToken
+    after(180, doPreviewHide)
 
-fn previewMaybeHide(token):
-    if token != previewToken:
+fn doPreviewHide():
+    if pendingToken != previewToken:
         return
     if previewHeld:
         return
@@ -584,10 +583,8 @@ fn previewHold():
 
 fn previewLeave():
     previewHeld = False
-    let token = previewToken
-    after(80, fn():
-        previewMaybeHide(token)
-    )
+    pendingToken = previewToken
+    after(80, doPreviewHide)
 
 fn previewNew():
     let id = hoverApp
@@ -610,20 +607,20 @@ fn openRun():
     refresh()
 
 fn taskDrop(item, e):
-    let from = e.dragSource
-    let to = item.get("appId")
-    if from == "" or to == "" or from == to:
+    let srcId = e.dragSource
+    let dstId = item.get("appId")
+    if srcId == "" or dstId == "" or srcId == dstId:
         return
-    if not (from in pinned) or not (to in pinned):
+    if not (srcId in pinned) or not (dstId in pinned):
         return
     let next = []
     for x in pinned:
-        if x != from:
+        if x != srcId:
             next.append(x)
-    let idx = next.index(to)
+    let idx = next.index(dstId)
     if idx < 0:
         idx = len(next)
-    next.insert(idx, from)
+    next.insert(idx, srcId)
     setPinned(next)
 
 fn setPinned(list):
@@ -884,7 +881,7 @@ fn menuItems():
     if activeMenu == "file":
         return [
             {"label": t("New Terminal Window"), "id": "terminal"},
-            {"label": t("New Editor Window"), "id": "editor"},
+            {"label": t("New Note"), "id": "notes"},
             {"label": t("New File Manager Window"), "id": "files"},
             {"sep": True},
             {"label": t("Close Window"), "id": "close"},
@@ -927,7 +924,7 @@ fn menuPick(mi):
         sys.power("reboot")
     elif id == "shutdown":
         sys.power("off")
-    elif id == "terminal" or id == "editor" or id == "files":
+    elif id == "terminal" or id == "notes" or id == "files":
         sys.open(id)
     elif id == "close":
         for w in sys.windows():

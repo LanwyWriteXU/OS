@@ -581,3 +581,6 @@ body[data-theme="light"] .tok-op { color: #0a7ea4; }
 .run-foot { align-items: center; gap: 8px; flex: none; }
 .run-hint { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .run-foot .ui-btn { height: 28px; font-size: 11.5px; }
+
+/* notes markdown preview */
+.notes-preview { padding: 16px 18px; }

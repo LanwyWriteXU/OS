@@ -593,7 +593,7 @@ export class Kernel implements KernelApi {
       return;
     }
     this.touchRecent(path);
-    this.open('editor', { path });
+    this.open('notes', { path });
   }
 
   /* --------------------------------------------------------------- system */
@@ -732,7 +732,7 @@ export class Kernel implements KernelApi {
    */
   private seedSystemFiles() {
     const marker = '/etc/apps-seed';
-    const version = '4';
+    const version = '7';
     if (this.vfs.exists(marker) && this.vfs.read(marker).trim() === version) return;
     for (const d of [
       '/usr',

@@ -245,11 +245,9 @@ fn openWithApps(f):
     let out = []
     let ext = f.ext
     if f.type == "file":
-        out.append({"label": "Editor", "icon": "app-editor", "id": "editor"})
+        out.append({"label": "Notes", "icon": "app-notes", "id": "notes"})
         if ext == "osl" or ext == "oml":
             out.append({"label": "IDE", "icon": "app-ide", "id": "ide"})
-        if ext == "md" or ext == "txt":
-            out.append({"label": "Preview", "icon": "app-preview", "id": "preview"})
     return out
 
 fn menuFor(f, e):
@@ -284,10 +282,8 @@ fn openWithPick(it):
     if sel == "":
         return
     let id = it.get("id")
-    if id == "preview":
-        sys.open("preview", {"path": sel})
-    elif id == "editor":
-        sys.open("editor", {"path": sel})
+    if id == "notes":
+        sys.open("notes", {"path": sel})
     elif id == "ide":
         sys.open("ide", {"path": sel})
     refresh()

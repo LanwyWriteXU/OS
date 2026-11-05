@@ -1,19 +1,31 @@
-# notes.osl — a small Markdown note pad backed by ~/Documents/Notes.
+# notes.osl — a unified Markdown note pad and text editor.
+# Backed by ~/Documents/Notes, but can open any text/markdown file.
 
 let dir = "/home/user/Documents/Notes"
 let files = []
 let sel = ""
-let path = ""
+let path = args.get("path")
+if path == None:
+    path = ""
 let text = ""
 let dirty = False
 let words = 0
+let lines = 0
 let chars = 0
 let statusText = ""
+let previewMode = False
+let blocks = []
+let pickerOpen = False
+let pickerPath = "/home/user"
 
 fn onRefresh():
     # Only derived data here: the buffer is owned by the user, never reloaded
     # on refresh or the caret would jump while typing.
     words = 0
+    if text == "":
+        lines = 1
+    else:
+        lines = len(text.split("\n"))
     chars = len(text)
     for w in text.replace("\n", " ").split(" "):
         if w.strip() != "":
@@ -22,6 +34,8 @@ fn onRefresh():
         statusText = t("Unsaved changes")
     else:
         statusText = t("Saved")
+    blocks = parse(text)
+    setTitle()
 
 fn ensureDir():
     if not fs.exists(dir):
@@ -43,7 +57,7 @@ fn seed():
     let p = paths.join(dir, "Welcome.md")
     if fs.exists(p):
         return
-    fs.write(p, "# Welcome to Notes\n\nEverything you type here is a plain Markdown file in\n~/Documents/Notes. Create as many notes as you like.\n\n- Click a note on the left to open it\n- Press Save (Ctrl+S is handled by the editor app)\n- Notes survive a reload because they live in the file system\n")
+    fs.write(p, "# Welcome to Notes\n\nEverything you type here is a plain Markdown file in\n~/Documents/Notes. Create as many notes as you like.\n\n- Click a note on the left to open it\n- Toggle **Preview** to see it rendered\n- Notes survive a reload because they live in the file system\n")
 
 fn setTitle():
     if path == "":
@@ -52,7 +66,7 @@ fn setTitle():
         win.setTitle(paths.basename(path) + " — " + t("Notes"))
 
 fn openNote(p):
-    if dirty and path != "":
+    if dirty and path != "" and path != p:
         saveNow()
     sel = p
     path = p
@@ -79,6 +93,16 @@ fn save():
 fn onEdit():
     dirty = True
     refresh()
+
+fn onKey(e):
+    if e.ctrl and (e.key == "s" or e.key == "S"):
+        e.prevent()
+        save()
+    elif e.ctrl and (e.key == "o" or e.key == "O"):
+        e.prevent()
+        openPicker()
+
+# ------------------------------------------------------------ open / new
 
 fn newNote():
     ui.prompt(t("Note name"), "Note.md", createNote)
@@ -120,6 +144,62 @@ fn doDelete():
         refresh()
     ui.toast(t("Deleted ") + name, "trash")
 
+# ------------------------------------------------------------ file picker
+
+fn openPicker():
+    if path != "":
+        pickerPath = paths.dirname(path)
+    else:
+        pickerPath = "/home/user"
+    pickerOpen = True
+    refresh()
+
+fn closePicker():
+    pickerOpen = False
+    refresh()
+
+fn pickerTitle():
+    return pickerPath
+
+fn pickerItems():
+    let dirs = []
+    let filesOut = []
+    if pickerPath != "/":
+        dirs.append({"name": "..", "path": paths.dirname(pickerPath), "type": "dir", "size": 0})
+    for n in fs.list(pickerPath):
+        if n.type == "dir":
+            dirs.append(n)
+        else:
+            filesOut.append(n)
+    for f in filesOut:
+        dirs.append(f)
+    return dirs
+
+fn pickEntry(f):
+    if f.type == "dir":
+        pickerPath = f.path
+        refresh()
+        return
+    if dirty:
+        ui.confirm(t("Discard unsaved changes?"), openAfterConfirm, t("Open file"))
+        sel = f.path
+        return
+    openFrom(f.path)
+
+fn openAfterConfirm():
+    openFrom(sel)
+
+fn openFrom(p):
+    pickerOpen = False
+    path = p
+    text = fs.read(p)
+    dirty = False
+    loadList()
+    setTitle()
+    refresh()
+
+# ------------------------------------------------------------ context menu
+
 fn noteMenu(f, e):
     e.stop()
     sel = f.path
@@ -156,8 +236,59 @@ fn renameNote(name):
     setTitle()
     refresh()
 
+# ------------------------------------------------------------ markdown
+
+fn clean(s):
+    return s.replace("**", "").replace("`", "")
+
+fn parse(text):
+    let out = []
+    let inCode = False
+    let codeLines = []
+    for line in text.split("\n"):
+        if line.startswith("```"):
+            if inCode:
+                out.append({"kind": "code", "text": codeLines.join("\n")})
+                codeLines = []
+                inCode = False
+            else:
+                inCode = True
+            continue
+        if inCode:
+            codeLines.append(line)
+            continue
+        if line.startswith("### "):
+            out.append({"kind": "h3", "text": clean(line[4:])})
+        elif line.startswith("## "):
+            out.append({"kind": "h2", "text": clean(line[3:])})
+        elif line.startswith("# "):
+            out.append({"kind": "h1", "text": clean(line[2:])})
+        elif line.startswith("- ") or line.startswith("* "):
+            out.append({"kind": "li", "text": clean(line[2:])})
+        elif line.startswith("---"):
+            out.append({"kind": "hr", "text": ""})
+        elif line.strip() == "":
+            continue
+        else:
+            out.append({"kind": "p", "text": clean(line)})
+    if inCode and len(codeLines) > 0:
+        out.append({"kind": "code", "text": codeLines.join("\n")})
+    return out
+
+fn togglePreview():
+    previewMode = not previewMode
+    blocks = parse(text)
+    refresh()
+
+# ------------------------------------------------------------ boot
+
 loadList()
-if len(files) > 0:
+if path != "" and fs.exists(path) and not fs.isDir(path):
+    openNote(path)
+elif len(files) > 0:
     openNote(files[0].path)
 else:
     refresh()
+# The window's static <Window title> runs at mount and would override the
+# file name, so re-assert it just after mount.
+after(50, setTitle)
