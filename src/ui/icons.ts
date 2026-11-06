@@ -28,12 +28,35 @@ for (const [path, content] of Object.entries(modules)) {
 
 let iconUid = 0;
 
+/**
+ * Optional runtime source for icons. The kernel wires this to
+ * `/usr/share/icons/<name>.svg` so the icon set is an ordinary, editable part
+ * of the file system instead of a build-time constant.
+ */
+let externalSource: ((name: string) => string | null) | null = null;
+
+export function setIconSource(fn: ((name: string) => string | null) | null) {
+  externalSource = fn;
+}
+
+/** Every bundled icon, by id — used to seed `/usr/share/icons`. */
+export function bundledIcons(): Record<string, string> {
+  return ICONS;
+}
+
 export function hasIcon(name: string): boolean {
+  if (externalSource?.(name)) return true;
   return Object.prototype.hasOwnProperty.call(ICONS, name);
 }
 
 export function iconSvg(name: string): string {
-  const raw = ICONS[name] ?? ICONS['file'] ?? '';
+  let custom: string | null = null;
+  try {
+    custom = externalSource?.(name) ?? null;
+  } catch {
+    custom = null;
+  }
+  const raw = (custom && custom.trim() ? custom : ICONS[name]) ?? ICONS['file'] ?? '';
   return namespaceIds(raw, `v${++iconUid}`);
 }
 

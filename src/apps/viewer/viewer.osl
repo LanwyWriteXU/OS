@@ -11,6 +11,11 @@
 let path = args.get("path")
 if path == None:
     path = ""
+# The opener may hand us a ready-made data URL (used for text-based SVGs).
+let presetPath = path
+let presetSrc = args.get("src")
+if presetSrc == None:
+    presetSrc = ""
 let dir = "/home/user/Pictures"
 let images = []
 let src = ""
@@ -104,7 +109,10 @@ fn openImage(p):
     if d != dir:
         dir = d
         loadDir()
-    src = imageData(p)
+    if p == presetPath and presetSrc != "":
+        src = presetSrc
+    else:
+        src = imageData(p)
     natW = 0
     natH = 0
     dispW = 0

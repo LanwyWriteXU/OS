@@ -37,7 +37,7 @@
 
       <Div class="viewer-stage" onwheel="onWheel(event)" onmousedown="panStart(event)" onmousemove="panMove(event)" onmouseup="panEnd()" ondblclick="fitWindow()">
         <Div class="viewer-canvas" if="{src != ''}" style="transform: translate({panX}px, {panY}px) rotate({rotation}deg)">
-          <Image class="viewer-img" src="{src}" style="{imgStyle()}" onload="onLoad(event)"/>
+          <Image class="viewer-img" src="{src}" style="{imgStyle()}" visible="{dispW > 0}" onload="onLoad(event)"/>
         </Div>
         <VBox class="viewer-empty" if="{src == ''}">
           <Icon name="image" size="52"/>

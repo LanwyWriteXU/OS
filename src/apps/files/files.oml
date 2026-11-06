@@ -12,6 +12,7 @@
       <Button class="side-item" icon="apps" text="Applications" onclick="go('/usr/share/apps')"/>
       <Button class="side-item" icon="grid" text="App shortcuts" onclick="go('/usr/share/applications')"/>
       <Button class="side-item" icon="code" text="System sources" onclick="go('/usr/share/os')"/>
+      <Button class="side-item" icon="image" text="Icons" onclick="go('/usr/share/icons')"/>
       <Button class="side-item" icon="book" text="Translations" onclick="go('/usr/share/i18n')"/>
       <Button class="side-item" icon="hard-drive" text="System" onclick="go('/etc')"/>
       <Label class="side-meta" text="{t('{0} items in this folder', len(entries))}"/>

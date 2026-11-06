@@ -69,7 +69,14 @@ npm run preview
 - **系统源码全在文件管理器里**：每个内置应用以 `.oml` + `.osl` 放在
   `/usr/share/apps/<app>/`，外壳自身在 `/usr/share/os/`（`shell.osl`、`shell.oml`、
   `dialog.oml`、`menu.oml`），语言包在 `/usr/share/i18n/`，启动项在
-  `/usr/share/applications/`。文件管理器侧栏都有对应入口。
+  `/usr/share/applications/`，**全部图标**在 `/usr/share/icons/*.svg`。文件管理器
+  侧栏都有对应入口，图标目录里的 SVG 可以直接在图片查看器里打开。
+  系统只解释 OSL/OML，CSS 属于浏览器渲染层、不是 OS 的源码，所以不在文件系统里。
+- **给软件绑定图标**：把 `my-icon.svg` 丢进 `/usr/share/icons/`，然后在
+  `/etc/apps.json`（或 `/usr/share/apps/<id>/app.json`）里把该应用的 `icon`
+  改成 `my-icon`，调用 `sys.reloadApps()` 或刷新页面即可。`/usr/share/icons`
+  优先于内置图标。内置图标归系统所有，版本升级时会被刷新，所以自定义时请用
+  新的文件名。
 - **任务栏 / Dock**：Windows 任务栏支持固定应用（右键开始菜单或任务栏按钮），
   同一应用的多个窗口会合并成一个按钮并显示数量，点击在窗口之间循环切换，
   鼠标悬停时只有两个以上窗口才弹出切换面板；固定按钮可以拖动排序。macOS Dock 同样可增删固定项，并把最小化窗口收进 Dock。

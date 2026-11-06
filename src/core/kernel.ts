@@ -15,7 +15,7 @@ import { Interpreter } from '../osl/interp';
 import { createBuiltins, formatTime } from '../osl/builtins';
 import type { Host, KernelApi, WindowHandle, WindowInfo, AppInfo, UiBridge } from '../osl/host';
 import { APPS, getApp, type AppDef } from '../apps/registry';
-import { iconSvg } from '../ui/icons';
+import { iconSvg, setIconSource, bundledIcons } from '../ui/icons';
 import { t as tr, setCatalog, catalogJson, catalogFor, type Lang } from '../i18n';
 
 interface AppInstance {
@@ -64,13 +64,19 @@ export class Kernel implements KernelApi {
   private audioCtx: AudioContext | null = null;
   /** Metadata loaded from /etc/apps.json (name, icon, size, hidden). */
   private appMeta = new Map<string, any>();
+  /** Icons read from /usr/share/icons, cached until the file system changes. */
+  private iconCache = new Map<string, string | null>();
   /** Real IndexedDB quota/usage, read once at boot (bytes). */
   private storageQuota = { supported: false, usage: 0, quota: 0 };
 
   constructor(public vfs: Vfs, public settings: SettingsStore) {
     this.loadRecent();
     this.overlays = new Overlays(this.makeSystemHost());
+    // Icons are ordinary files: /usr/share/icons/<name>.svg wins over the
+    // bundled copy, so the whole icon set is editable from the file manager.
+    setIconSource((name) => this.resolveIcon(name));
     this.vfs.onChange(() => {
+      this.iconCache.clear();
       for (const inst of this.instances.values()) inst.ui.scheduleRefresh();
     });
     this.wm.onChange = () => this.shellUi?.scheduleRefresh();
@@ -460,6 +466,25 @@ export class Kernel implements KernelApi {
     };
   }
 
+  /**
+   * /usr/share/icons/<name>.svg when the file system provides one, else null
+   * so the bundled copy is used. Cached until the VFS changes.
+   */
+  private resolveIcon(name: string): string | null {
+    const key = String(name ?? '');
+    if (!key) return null;
+    if (this.iconCache.has(key)) return this.iconCache.get(key) ?? null;
+    let svg: string | null = null;
+    try {
+      const p = `/usr/share/icons/${key}.svg`;
+      if (this.vfs.exists(p) && !this.vfs.isDir(p)) svg = this.vfs.read(p);
+    } catch {
+      svg = null;
+    }
+    this.iconCache.set(key, svg);
+    return svg;
+  }
+
   /** Reads /etc/apps.json, the editable application registry. */
   private loadAppRegistry() {
     this.appMeta.clear();
@@ -481,6 +506,7 @@ export class Kernel implements KernelApi {
   /** OSL `sys.reloadApps()`: re-reads the registry and repaints the shell. */
   reloadApps() {
     this.loadAppRegistry();
+    this.iconCache.clear();
     for (const inst of this.instances.values()) inst.ui.scheduleRefresh();
     this.shellUi?.scheduleRefresh();
     return true;
@@ -598,7 +624,16 @@ export class Kernel implements KernelApi {
     this.touchRecent(path);
     // Images get the dedicated viewer; everything else opens as text.
     if (IMAGE_RE.test(path)) {
-      this.open('viewer', { path });
+      const args: Record<string, any> = { path };
+      // Source SVGs live as text, so hand the viewer a properly encoded data
+      // URL instead of making it build one by hand.
+      if (/\.svg$/i.test(path)) {
+        const raw = this.vfs.read(path);
+        if (raw && !/^data:/i.test(raw)) {
+          args.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(raw);
+        }
+      }
+      this.open('viewer', args);
       return;
     }
     this.open('notes', { path });
@@ -717,7 +752,7 @@ export class Kernel implements KernelApi {
    */
   private seedSystemFiles() {
     const marker = '/etc/apps-seed';
-    const version = '8';
+    const version = '10';
     if (this.vfs.exists(marker) && this.vfs.read(marker).trim() === version) return;
     for (const d of [
       '/usr',
@@ -726,6 +761,7 @@ export class Kernel implements KernelApi {
       '/usr/share/apps',
       '/usr/share/os',
       '/usr/share/i18n',
+      '/usr/share/icons',
     ]) {
       this.vfs.mkdir(d, true, true);
     }
@@ -777,13 +813,36 @@ export class Kernel implements KernelApi {
     this.vfs.write('/usr/share/os/menu.oml', menuOml);
     this.vfs.write(
       '/usr/share/os/README.md',
-      `# System sources\n\n- \`shell.osl\` / \`shell.oml\` — the desktop, taskbar and dock\n- \`dialog.oml\` / \`menu.oml\` — dialogs and context menus\n- \`/usr/share/apps/<id>/\` — one folder per application\n- \`/usr/share/i18n/*.json\` — UI translations\n\nUse \`i18n.reload()\` in OSL to re-read the catalogues after editing them.\n`,
+      `# System sources\n\n- \`shell.osl\` / \`shell.oml\` — the desktop, taskbar and dock\n- \`dialog.oml\` / \`menu.oml\` — dialogs and context menus\n- \`/usr/share/apps/<id>/\` — one folder per application\n- \`/usr/share/icons/*.svg\` — every icon, editable and overridable\n- \`/usr/share/i18n/*.json\` — UI translations\n\nUse \`i18n.reload()\` in OSL to re-read the catalogues after editing them.\n`,
     );
     // Never clobber translations a user may have edited by hand.
     for (const lang of ['en', 'zh'] as Lang[]) {
       const p = `/usr/share/i18n/${lang}.json`;
       if (!this.vfs.exists(p)) this.vfs.write(p, catalogJson(lang));
     }
+    // The icon set itself: every glyph is a normal SVG file, editable in Files
+    // and overridable per install. Like the app sources it is owned by the
+    // system, so a seed-version bump refreshes it.
+    for (const [name, svg] of Object.entries(bundledIcons())) {
+      this.vfs.write(`/usr/share/icons/${name}.svg`, svg);
+    }
+    // 1.1.9 briefly mirrored the stylesheets here; an OS that only interprets
+    // OSL/OML has no use for them, so drop the folder again.
+    if (this.vfs.exists('/usr/share/os/styles')) this.vfs.remove('/usr/share/os/styles');
+    this.vfs.write(
+      '/usr/share/icons/README.md',
+      '# Icons\n\n' +
+        'Every icon is an SVG named after its icon id. `iconSvg()` prefers this\n' +
+        'folder over the copy built into the bundle, so editing a file here\n' +
+        'changes the icon everywhere after a refresh.\n\n' +
+        '## Binding an icon to an application\n\n' +
+        '1. Drop `my-icon.svg` into this folder.\n' +
+        '2. Set `"icon": "my-icon"` for the app in `/etc/apps.json`\n' +
+        '   (or in `/usr/share/apps/<id>/app.json`).\n' +
+        '3. Run `sys.reloadApps()` in a script, or reload the page.\n\n' +
+        'The same id works anywhere an icon name is accepted: desktop shortcuts,\n' +
+        'notifications, window titles, `.desktop` entries.\n',
+    );
     this.vfs.write(marker, version);
   }
 

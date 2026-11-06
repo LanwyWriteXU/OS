@@ -47,7 +47,10 @@
   border-radius: 2px;
 }
 
-.desk-icon img, .desk-icon svg { width: 100%; height: 100%; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35)); }
+/* No drop-shadow here: with transparent glyphs a blurred shadow reads as a
+   grey plate behind the icon on light wallpapers. The label keeps its own
+   text-shadow for legibility. */
+.desk-icon img, .desk-icon svg { width: 100%; height: 100%; }
 .desk-icon span {
   font-size: 11.5px;
   line-height: 1.25;

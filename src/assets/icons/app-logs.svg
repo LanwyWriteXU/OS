@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <g fill="none" stroke="#93a3b8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" transform="translate(24 24) scale(1.32) translate(-24 -24)">
+  <g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" transform="translate(24 24) scale(1.5) translate(-24 -24)">
       <path d="M19 18h14.4"/>
       <path d="M19 24h14.4"/>
       <path d="M19 30h9.6"/>
-      <circle cx="14.6" cy="18" r="1.5" fill="#93a3b8" fill-opacity="0.92" stroke="none"/>
-      <circle cx="14.6" cy="24" r="1.5" fill="#93a3b8" fill-opacity="0.92" stroke="none"/>
-      <circle cx="14.6" cy="30" r="1.5" fill="#93a3b8" fill-opacity="0.92" stroke="none"/>
+      <circle cx="14.6" cy="18" r="1.5" fill="currentColor" fill-opacity="0.92" stroke="none"/>
+      <circle cx="14.6" cy="24" r="1.5" fill="currentColor" fill-opacity="0.92" stroke="none"/>
+      <circle cx="14.6" cy="30" r="1.5" fill="currentColor" fill-opacity="0.92" stroke="none"/>
   </g>
 </svg>

@@ -220,7 +220,7 @@ export class Overlays {
       if (!this.host.vfs.exists(path) || this.host.vfs.isDir(path)) return '';
       const raw = this.host.vfs.read(path);
       if (/^data:image\//i.test(raw)) return raw;
-      if (extname(path) === 'svg') return 'data:image/svg+xml;utf8,' + raw.replace(/#/g, '%23');
+      if (extname(path) === 'svg') return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(raw);
       return '';
     } catch {
       return '';
