@@ -17,6 +17,15 @@ interface Mounted {
   update(): void;
   /** Releases nodes mounted lazily (conditionals, lists) and their subtrees. */
   dispose?(): void;
+  /**
+   * The nodes this mount currently owns, in document order.
+   *
+   * A list row has to reorder its children when the underlying data is
+   * reshuffled, and an `if` branch replaces its subtree while the layout is
+   * live. Reading the nodes lazily is what keeps those two in sync — a snapshot
+   * taken at mount time would resurrect detached nodes on the next reorder.
+   */
+  nodes?(): ChildNode[];
 }
 
 const staticNoop: Mounted = { update() {}, dispose() {} };
@@ -230,6 +239,7 @@ export class UiInstance {
         }
         if (mounted) mounted.update();
       },
+      nodes: () => [...nodes, anchor],
       dispose: () => {
         unmount();
         anchor.remove();
@@ -276,12 +286,29 @@ export class UiInstance {
       if (name === 'if') continue;
 
       if (name === 'focus') {
-        requestAnimationFrame(() => {
+        // A focus binding moves the caret (and scrolls the element into view
+        // inside its nearest scroll container) when it turns true. Tracking the
+        // last value keeps a plain refresh from stealing focus again, which is
+        // what makes "jump to section" work from OSL without touching the DOM.
+        let wasOn = false;
+        updates.push(() => {
+          let on = true;
           try {
-            (el as HTMLElement).focus();
-          } catch {
-            /* ignore */
+            on = raw.includes('{') ? this.truthy(this.evalBinding(raw, env)) : true;
+          } catch (e) {
+            this.reportError(e, `focus=${raw}`);
+            return;
           }
+          if (on === wasOn) return;
+          wasOn = on;
+          if (!on) return;
+          requestAnimationFrame(() => {
+            try {
+              (el as HTMLElement).focus({ preventScroll: false });
+            } catch {
+              /* ignore */
+            }
+          });
         });
         continue;
       }
@@ -498,6 +525,7 @@ export class UiInstance {
         for (const u of updates) u();
         for (const c of children) c.update();
       },
+      nodes: () => [el],
       dispose() {
         for (const c of children) c.dispose?.();
       },
@@ -523,8 +551,10 @@ export class UiInstance {
     interface Row {
       env: Env;
       mounted: Mounted[];
-      nodes: ChildNode[];
     }
+    /** Nodes a row owns *right now* — `if` branches may have swapped them. */
+    const liveNodes = (row: Row): ChildNode[] =>
+      row.mounted.flatMap((m) => (m.nodes ? m.nodes() : []));
     let rows = new Map<string, Row>();
     let signature: string | null = null;
     let order: string[] = [];
@@ -541,10 +571,9 @@ export class UiInstance {
       const frag = document.createDocumentFragment();
       const mounted: Mounted[] = [];
       for (const childNode of node.children) mounted.push(this.mountNode(childNode, frag, childEnv));
-      const nodes = Array.from(frag.childNodes);
       const host = anchor.parentNode;
       if (host) host.insertBefore(frag, anchor);
-      return { env: childEnv, mounted, nodes };
+      return { env: childEnv, mounted };
     };
 
     const keyOf = (item: any, idx: number): string => {
@@ -562,8 +591,8 @@ export class UiInstance {
     };
 
     const dropRow = (row: Row) => {
+      for (const n of liveNodes(row)) n.remove();
       for (const m of row.mounted) m.dispose?.();
-      for (const n of row.nodes) n.remove();
     };
 
     return {
@@ -609,7 +638,7 @@ export class UiInstance {
           if (host) {
             for (const key of keys) {
               const row = next.get(key);
-              if (row) for (const n of row.nodes) host.insertBefore(n, anchor);
+              if (row) for (const n of liveNodes(row)) host.insertBefore(n, anchor);
             }
           }
           order = keys;
@@ -619,6 +648,12 @@ export class UiInstance {
         }
         rows = next;
         updateAll();
+      },
+      nodes: () => {
+        const out: ChildNode[] = [];
+        for (const row of rows.values()) out.push(...liveNodes(row));
+        out.push(anchor);
+        return out;
       },
       dispose: () => {
         for (const row of rows.values()) dropRow(row);

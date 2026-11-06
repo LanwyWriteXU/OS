@@ -338,5 +338,22 @@
   "Browse…": "浏览…",
   "Copied": "已复制",
   "Icons": "图标",
-  "Actual size": "实际大小"
+  "Actual size": "实际大小",
+  "Language Docs": "语言文档",
+  "Reference": "参考手册",
+  "Edit source": "编辑源文件",
+  "Tutorial": "教程",
+  "Search the manual": "搜索文档",
+  "{0} matches": "{0} 条结果",
+  "Chapters are plain markdown in /usr/share/doc": "章节就是 /usr/share/doc 下的 Markdown 文件",
+  "{0} lines": "{0} 行",
+  "Hello": "示例应用",
+  "{0} clicks": "{0} 次点击",
+  "Clicked": "点了",
+  "Click me": "点我",
+  "Greet": "打招呼",
+  "Your name": "你的名字",
+  "Nothing yet — press a button": "还没有内容 —— 点个按钮试试",
+  "Hello, OSL": "你好，OSL",
+  "This is the template app — every line is commented in /usr/share/apps/hello.": "这是模板应用 —— 详细注释在 /usr/share/apps/hello 里。"
 }

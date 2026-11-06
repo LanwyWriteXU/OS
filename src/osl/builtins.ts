@@ -430,6 +430,16 @@ export function createBuiltins(interp: Interpreter, host: Host): Record<string, 
     isFullscreen: () => host.window.isFullscreen(),
     isMaximized: () => host.window.isMaximized(),
     id: () => host.window.id,
+    /** { width, height } of the content area — changes when the user resizes. */
+    size: () => {
+      const s = host.window.size();
+      const m = new Map<string, any>();
+      m.set('width', s.width);
+      m.set('height', s.height);
+      return m;
+    },
+    width: () => host.window.size().width,
+    height: () => host.window.size().height,
   };
 
   const time = {
@@ -499,6 +509,24 @@ export function createBuiltins(interp: Interpreter, host: Host): Record<string, 
     pow: (a: any, b: any) => Math.pow(Number(a), Number(b)),
     min: (...a: any[]) => Math.min(...a.map(Number)),
     max: (...a: any[]) => Math.max(...a.map(Number)),
+    sin: (n: any) => Math.sin(Number(n)),
+    cos: (n: any) => Math.cos(Number(n)),
+    tan: (n: any) => Math.tan(Number(n)),
+    asin: (n: any) => Math.asin(Number(n)),
+    acos: (n: any) => Math.acos(Number(n)),
+    atan: (n: any) => Math.atan(Number(n)),
+    log: (n: any) => Math.log(Number(n)),
+    log10: (n: any) => Math.log10(Number(n)),
+    exp: (n: any) => Math.exp(Number(n)),
+    /** Integer factorial; negative and non-integer input yields NaN. */
+    fact: (n: any) => {
+      const v = Number(n);
+      if (!Number.isFinite(v) || v < 0 || Math.floor(v) !== v) return NaN;
+      if (v > 170) return Infinity;
+      let out = 1;
+      for (let i = 2; i <= v; i++) out *= i;
+      return out;
+    },
     random: () => Math.random(),
     randint: (a: any, b: any) => Math.floor(Math.random() * (Number(b) - Number(a) + 1)) + Number(a),
     sign: (n: any) => Math.sign(Number(n)),

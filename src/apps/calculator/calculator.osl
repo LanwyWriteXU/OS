@@ -1,8 +1,56 @@
 # calculator.osl — expression evaluation is delegated to the OSL evaluator.
+#
+# The layout is responsive: a compact 4-column keypad while the window is
+# narrow, and a scientific panel beside it once the window is wide enough.
+# `onRefresh` reads `win.size()`, and the kernel repaints an app whenever its
+# window is resized, so dragging the corner switches the mode live.
 
 let expr = ""
 let display = "0"
 let justEval = False
+let sci = False
+# Below this content width the scientific panel would squeeze the digits.
+let SPLIT = 460
+
+fn onRefresh():
+    let wide = win.size().get("width") >= SPLIT
+    if wide != sci:
+        sci = wide
+
+# ------------------------------------------------------------ formatting
+
+fn fmt(v):
+    let raw = str(v)
+    if raw.contains("Infinity") or raw.contains("NaN"):
+        return "Error"
+    if raw.contains("e") or raw.contains("E"):
+        return raw
+    let out = str(math.round(v, 10))
+    if out.endswith(".0"):
+        out = out[:len(out) - 2]
+    return out
+
+fn evaluate():
+    if expr == "":
+        return
+    try:
+        let value = eval(expr)
+        display = fmt(value)
+        expr = display == "Error" ? "" : display
+        justEval = display != "Error"
+    except e:
+        display = "Error"
+        expr = ""
+        justEval = False
+
+# A key that starts with an arithmetic operator continues from the result;
+# anything else (a digit, a function, a constant) starts a new expression.
+fn isOp(k):
+    if len(k) == 0:
+        return False
+    return k[0] in "+-*/"
+
+# --------------------------------------------------------------- keypad
 
 fn press(k):
     if k == "C":
@@ -16,19 +64,10 @@ fn press(k):
         if display == "":
             display = "0"
     elif k == "=":
-        if expr == "":
-            return
-        try:
-            let value = eval(expr)
-            display = str(value)
-            expr = display
-            justEval = True
-        except e:
-            display = "Error"
-            expr = ""
+        evaluate()
     else:
         if justEval:
-            if k in "+-*/":
+            if isOp(k):
                 expr = display
             else:
                 expr = ""

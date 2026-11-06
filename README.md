@@ -58,7 +58,19 @@ npm run preview
 - **终端**：管道 `|`、重定向 `>` `>>` `<`、`&&` `||` `;`、`$VAR` 展开、Tab 补全、
   历史持久化、ANSI SGR 配色，45+ 条命令，含 `fastfetch`。
 - **应用**：Files、Terminal、Editor、IDE、Notes、Tasks、Calendar、Clock、Preview、
-  Image Viewer、Monitor、Logs、Settings、Calculator、About —— 每个应用都是一对 `.oml` + `.osl` 文件。
+  Image Viewer、Language Docs、Monitor、Logs、Settings、Calculator、About —— 每个应用
+  都是一对 `.oml` + `.osl` 文件。每个应用自带最小窗口尺寸（`minWidth`/`minHeight`），
+  缩小到布局极限就会停住；窗口尺寸变化会触发重绘，计算器就是靠这个在基础/科学之间切换。
+- **语言文档**：开始菜单里的 Language Docs 是 OSL / OML 的完整参考（语法、类型、标准库、
+  事件与重绘模型、从零写一个应用）。排版照 Python 官方文档：左侧是「章 → 节」目录，
+  点节直接跳到正文对应位置，顶上有关键词搜索（跨全部章节，点结果跳到命中行）；中英双语
+  一键切换。章节本身就是 `/usr/share/doc/*.md`，可以直接用便签改。
+- **Markdown 渲染器**：便签、预览、语言文档共用 `/usr/share/os/lib/markdown.osl` —— 标题 1–6 级、
+  中英混排软换行、带语言标签的代码块、有序 / 无序 / 任务列表（四级嵌套）、引用、带对齐的
+  管道表格、分隔线；`**粗体**`、`*斜体*`、行内代码、`[链接](url)`、`![图片](src)` 会压成纯文本
+  （OML 的 Label 是纯文本，不支持行内富文本）。
+- **模板应用**：`/usr/share/apps/hello` 是最小的可跑应用（输入框、计数器、日志）。
+  复制改名 → 在 `/etc/apps.json` 里加一条 → `sys.reloadApps()`，你的应用就出现在开始菜单里。
 - **多语言**：中文 / English 界面，词条集中在 `src/i18n`，设置面板可切换。
 - **桌面即文件系统**：`~/Desktop` 下的文件就是桌面图标，`.desktop` 是快捷方式。
   图标可以拖到桌面任意位置，坐标写入 `~/.config/desktop-layout.json`；右键「整理图标」复位。
@@ -77,6 +89,11 @@ npm run preview
   改成 `my-icon`，调用 `sys.reloadApps()` 或刷新页面即可。`/usr/share/icons`
   优先于内置图标。内置图标归系统所有，版本升级时会被刷新，所以自定义时请用
   新的文件名。
+- **升级时源码怎么同步**：内核把系统文件（外壳、应用源码、Markdown 库、图标、文档）
+  装进 VFS，并在 `/etc/system-manifest.json` 里记下各自的内容哈希。启动时哈希仍
+  匹配（说明你没改过）就用新 bundle 覆盖，哈希不匹配（你改过）就保留原样 ——
+  这样旧安装不会一直跑旧代码，本地修改也不会被升级冲掉。想恢复出厂版本，删掉
+  对应文件再刷新即可。
 - **任务栏 / Dock**：Windows 任务栏支持固定应用（右键开始菜单或任务栏按钮），
   同一应用的多个窗口会合并成一个按钮并显示数量，点击在窗口之间循环切换，
   鼠标悬停时只有两个以上窗口才弹出切换面板；固定按钮可以拖动排序。macOS Dock 同样可增删固定项，并把最小化窗口收进 Dock。

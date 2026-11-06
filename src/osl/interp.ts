@@ -1071,7 +1071,9 @@ export class Interpreter {
       case 'endsWith':
         return make((p) => s.endsWith(self.toStr(p)));
       case 'find':
-        return make((p) => s.indexOf(self.toStr(p)));
+        // The optional second argument is a start offset: scanning for the next
+        // delimiter is a common need (link parsing, tokenising).
+        return make((p, from: any = 0) => s.indexOf(self.toStr(p), Math.max(0, Number(from) || 0)));
       case 'contains':
         return make((p) => s.includes(self.toStr(p)));
       case 'count':

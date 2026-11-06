@@ -32,13 +32,34 @@
             <Label class="md-h1" text="{b.text}" if="{b.kind == 'h1'}"/>
             <Label class="md-h2" text="{b.text}" if="{b.kind == 'h2'}"/>
             <Label class="md-h3" text="{b.text}" if="{b.kind == 'h3'}"/>
+            <Label class="md-h4" text="{b.text}" if="{b.kind == 'h4'}"/>
+            <Label class="md-h5" text="{b.text}" if="{b.kind == 'h5'}"/>
+            <Label class="md-h6" text="{b.text}" if="{b.kind == 'h6'}"/>
             <Label class="md-p" text="{b.text}" if="{b.kind == 'p'}"/>
-            <HBox class="md-li" if="{b.kind == 'li'}">
-              <Div class="md-dot"/>
+            <HBox class="md-li lvl{b.level}" if="{b.kind == 'li'}">
+              <Label class="md-mark" text="{liMark(b)}"/>
+              <Label text="{b.text}" flex="1"/>
+            </HBox>
+            <HBox class="md-quote lvl{b.level}" if="{b.kind == 'quote'}">
               <Label text="{b.text}" flex="1"/>
             </HBox>
             <VBox class="md-code" if="{b.kind == 'code'}">
+              <Label class="md-lang" text="{b.lang}" if="{b.lang != ''}"/>
               <Label text="{b.text}"/>
+            </VBox>
+            <VBox class="md-table" if="{b.kind == 'table'}">
+              <HBox class="md-trow md-thead">
+                <For each="b.header" as="h" index="j">
+                  <Label class="md-th" text="{h}" flex="1" style="text-align:{b.align[j]}"/>
+                </For>
+              </HBox>
+              <For each="b.rows" as="row">
+                <HBox class="md-trow">
+                  <For each="row" as="cell" index="j">
+                    <Label class="md-td" text="{cell}" flex="1" style="text-align:{b.align[j]}"/>
+                  </For>
+                </HBox>
+              </For>
             </VBox>
             <Divider if="{b.kind == 'hr'}"/>
           </For>

@@ -7,6 +7,9 @@ import { iconSvg } from '../ui/icons';
 import { t } from '../i18n';
 
 export interface ManagedWindow extends WindowInfo {
+  /** Smallest size this window may be resized to (per application). */
+  minW: number;
+  minH: number;
   fullscreen: boolean;
   el: HTMLElement;
   bar: HTMLElement;
@@ -28,10 +31,16 @@ interface OpenOptions {
   height: number;
   x?: number;
   y?: number;
+  /** Per-application floor for the resize handles; defaults below. */
+  minWidth?: number;
+  minHeight?: number;
 }
 
-const MIN_W = 380;
-const MIN_H = 260;
+const MIN_W = 360;
+const MIN_H = 240;
+/** Never let a window be smaller than its own layout can survive. */
+const HARD_MIN_W = 240;
+const HARD_MIN_H = 180;
 
 export class WindowManager {
   layer!: HTMLElement;
@@ -78,8 +87,10 @@ export class WindowManager {
 
   open(opts: OpenOptions): ManagedWindow {
     const rect = this.layer.getBoundingClientRect();
-    const width = Math.min(opts.width, rect.width - 40);
-    const height = Math.min(opts.height, rect.height - 40);
+    const minW = Math.max(HARD_MIN_W, Math.min(opts.minWidth ?? MIN_W, rect.width));
+    const minH = Math.max(HARD_MIN_H, Math.min(opts.minHeight ?? MIN_H, rect.height));
+    const width = Math.min(Math.max(opts.width, minW), rect.width - 20);
+    const height = Math.min(Math.max(opts.height, minH), rect.height - 20);
     const offset = (this.cascade++ % 7) * 26;
     const left = opts.x ?? Math.max(12, Math.round((rect.width - width) / 2) + offset - 60);
     const top = opts.y ?? Math.max(12, Math.round((rect.height - height) / 2) + offset - 50);
@@ -112,6 +123,8 @@ export class WindowManager {
       appId: opts.appId,
       title: opts.title,
       icon: opts.icon,
+      minW,
+      minH,
       minimized: false,
       active: true,
       maximized: false,
@@ -337,8 +350,8 @@ export class WindowManager {
   setSize(w: ManagedWindow, width: number, height: number) {
     this.animate(w);
     const r = this.layer.getBoundingClientRect();
-    w.rect.width = Math.max(MIN_W, Math.min(width, r.width));
-    w.rect.height = Math.max(MIN_H, Math.min(height, r.height));
+    w.rect.width = Math.max(w.minW, Math.min(width, r.width));
+    w.rect.height = Math.max(w.minH, Math.min(height, r.height));
     this.apply(w);
   }
 
@@ -375,8 +388,8 @@ export class WindowManager {
         w.rect = { left: 0, top: 0, width: r.width, height: r.height };
         this.apply(w);
       } else {
-        w.rect.width = Math.min(w.rect.width, r.width - 8);
-        w.rect.height = Math.min(w.rect.height, r.height - 8);
+        w.rect.width = Math.min(Math.max(w.rect.width, w.minW), r.width);
+        w.rect.height = Math.min(Math.max(w.rect.height, w.minH), r.height);
         w.rect.left = Math.max(0, Math.min(w.rect.left, r.width - 80));
         w.rect.top = Math.max(0, Math.min(w.rect.top, r.height - 60));
         this.apply(w);
@@ -479,14 +492,14 @@ export class WindowManager {
           const dx = me.clientX - startX;
           const dy = me.clientY - startY;
           let { left, top, width, height } = start;
-          if (dir.includes('e')) width = Math.max(MIN_W, start.width + dx);
-          if (dir.includes('s')) height = Math.max(MIN_H, start.height + dy);
+          if (dir.includes('e')) width = Math.max(w.minW, start.width + dx);
+          if (dir.includes('s')) height = Math.max(w.minH, start.height + dy);
           if (dir.includes('w')) {
-            width = Math.max(MIN_W, start.width - dx);
+            width = Math.max(w.minW, start.width - dx);
             left = start.left + (start.width - width);
           }
           if (dir.includes('n')) {
-            height = Math.max(MIN_H, start.height - dy);
+            height = Math.max(w.minH, start.height - dy);
             top = start.top + (start.height - height);
           }
           w.rect = { left, top, width, height };

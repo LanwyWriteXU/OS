@@ -1,5 +1,10 @@
 # notes.osl — a unified Markdown note pad and text editor.
 # Backed by ~/Documents/Notes, but can open any text/markdown file.
+#
+# The Markdown reader itself lives in /usr/share/os/lib/markdown.osl and is
+# shared with Preview and Language Docs.
+
+import "/usr/share/os/lib/markdown.osl" as md
 
 let dir = "/home/user/Documents/Notes"
 let files = []
@@ -37,7 +42,7 @@ fn onRefresh():
         statusText = t("Unsaved changes")
     else:
         statusText = t("Saved")
-    blocks = parse(text)
+    blocks = md.parse(text)
     setTitle()
 
 fn ensureDir():
@@ -263,46 +268,19 @@ fn renameNote(name):
 
 # ------------------------------------------------------------ markdown
 
-fn clean(s):
-    return s.replace("**", "").replace("`", "")
-
-fn parse(text):
-    let out = []
-    let inCode = False
-    let codeLines = []
-    for line in text.split("\n"):
-        if line.startswith("```"):
-            if inCode:
-                out.append({"kind": "code", "text": codeLines.join("\n")})
-                codeLines = []
-                inCode = False
-            else:
-                inCode = True
-            continue
-        if inCode:
-            codeLines.append(line)
-            continue
-        if line.startswith("### "):
-            out.append({"kind": "h3", "text": clean(line[4:])})
-        elif line.startswith("## "):
-            out.append({"kind": "h2", "text": clean(line[3:])})
-        elif line.startswith("# "):
-            out.append({"kind": "h1", "text": clean(line[2:])})
-        elif line.startswith("- ") or line.startswith("* "):
-            out.append({"kind": "li", "text": clean(line[2:])})
-        elif line.startswith("---"):
-            out.append({"kind": "hr", "text": ""})
-        elif line.strip() == "":
-            continue
-        else:
-            out.append({"kind": "p", "text": clean(line)})
-    if inCode and len(codeLines) > 0:
-        out.append({"kind": "code", "text": codeLines.join("\n")})
-    return out
+fn liMark(b):
+    let task = b.get("task")
+    if task == "done":
+        return "☑"
+    if task == "open":
+        return "☐"
+    if b.get("ordered"):
+        return str(b.get("num")) + "."
+    return "•"
 
 fn togglePreview():
     previewMode = not previewMode
-    blocks = parse(text)
+    blocks = md.parse(text)
     refresh()
 
 # ------------------------------------------------------------ boot

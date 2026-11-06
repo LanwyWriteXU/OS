@@ -1,0 +1,300 @@
+# markdown.osl — the Markdown reader shared by Notes, Preview and Language Docs.
+#
+# It turns a document into a flat list of blocks; each app decides how to draw
+# every kind. Supported:
+#
+#   - headings # … ######
+#   - paragraphs with soft wrapping (CJK aware, no stray spaces)
+#   - fenced code blocks with a language tag
+#   - bullet lists, numbered lists, task lists, up to four levels of nesting
+#   - blockquotes (nested)
+#   - pipe tables with :--- / :---: / ---: alignment
+#   - horizontal rules
+#   - inline **bold**, *italic*, `code`, [links](url), ![images](src) — these
+#     are flattened to their text, because an OML Label is plain text
+#
+# Every block carries the 1-based source line it came from, which is what lets
+# the manual jump from a search hit to the exact paragraph.
+#
+# Usage:
+#   import "/usr/share/os/lib/markdown.osl" as md
+#   let blocks = md.parse(text)
+
+# ------------------------------------------------------------------ inline
+
+fn isCjk(ch):
+    return ord(ch) > 11904
+
+fn dropLinks(s):
+    let out = ""
+    let i = 0
+    let n = len(s)
+    while i < n:
+        let ch = s[i]
+        if ch == "!" and i + 1 < n and s[i + 1] == "[":
+            i += 1
+            continue
+        if ch == "[":
+            let close = s.find("]", i)
+            if close > i:
+                let paren = s.find("(", close)
+                if paren == close + 1:
+                    let endp = s.find(")", paren)
+                    if endp > paren:
+                        out = out + s[i + 1:close]
+                        i = endp + 1
+                        continue
+        out = out + ch
+        i += 1
+    return out
+
+fn stripInline(s):
+    let t = s.replace("\\`", "`")
+    t = t.replace("`", "")
+    t = t.replace("**", "")
+    t = t.replace("__", "")
+    # Lone stars are emphasis only when they come in pairs; this leaves "2*3"
+    # alone, which a naive replace would eat.
+    if t.count("*") >= 2 and t.count("*") % 2 == 0:
+        t = t.replace("*", "")
+    t = dropLinks(t)
+    return t.strip()
+
+fn plain(s):
+    return stripInline(s)
+
+fn joinSoft(parts):
+    let out = ""
+    for p in parts:
+        if p == "":
+            continue
+        if out == "":
+            out = p
+        else:
+            let tail = out[len(out) - 1]
+            let head = p[0]
+            # Chinese text flows without spaces; English needs them.
+            if isCjk(tail) or isCjk(head):
+                out = out + p
+            else:
+                out = out + " " + p
+    return out
+
+# ------------------------------------------------------------------- lists
+
+fn orderedNumber(s):
+    let i = 0
+    while i < len(s) and "0123456789".find(s[i]) >= 0:
+        i += 1
+    if i == 0 or i + 1 >= len(s):
+        return 0
+    if s[i] != "." and s[i] != ")":
+        return 0
+    if s[i + 1] != " ":
+        return 0
+    return int(s[:i])
+
+fn listInfo(raw):
+    if raw.strip() == "":
+        return None
+    let ind = 0
+    while ind < len(raw) and (raw[ind] == " " or raw[ind] == "\t"):
+        ind += 1
+    let body = raw[ind:]
+    let level = math.floor(ind / 2)
+    if level > 4:
+        level = 4
+    let ordered = False
+    let num = 0
+    let rest = ""
+    let n = orderedNumber(body)
+    if n > 0:
+        ordered = True
+        num = n
+        let j = 0
+        while j < len(body) and "0123456789".find(body[j]) >= 0:
+            j += 1
+        rest = body[j + 1:].strip()
+    elif body.startswith("- ") or body.startswith("* ") or body.startswith("+ "):
+        rest = body[2:].strip()
+    else:
+        return None
+    let task = ""
+    if rest.startswith("[ ] "):
+        task = "open"
+        rest = rest[3:].strip()
+    elif rest.lower().startswith("[x] "):
+        task = "done"
+        rest = rest[3:].strip()
+    return {"text": rest, "level": level, "ordered": ordered, "num": num, "task": task}
+
+# ------------------------------------------------------------------ blocks
+
+fn headingLevel(t):
+    let lv = 0
+    while lv < len(t) and t[lv] == "#":
+        lv += 1
+    if lv == 0 or lv > 6:
+        return 0
+    if lv >= len(t) or t[lv] != " ":
+        return 0
+    return lv
+
+fn isHr(t):
+    if len(t) < 3:
+        return False
+    let ch = t[0]
+    if ch != "-" and ch != "*" and ch != "_":
+        return False
+    let count = 0
+    for c in t:
+        if c == ch:
+            count += 1
+        elif c != " ":
+            return False
+    return count >= 3
+
+fn isTableSep(s):
+    let t = s.strip()
+    if not t.startswith("|"):
+        return False
+    if t.find("-") < 0:
+        return False
+    for c in t:
+        if c != "|" and c != "-" and c != ":" and c != " ":
+            return False
+    return True
+
+fn splitRow(s):
+    let t = s.strip()
+    if t.startswith("|"):
+        t = t[1:]
+    if t.endswith("|"):
+        t = t[:len(t) - 1]
+    let out = []
+    for c in t.split("|"):
+        out.append(stripInline(c.strip()))
+    return out
+
+fn alignRow(s):
+    let out = []
+    for c in splitRow(s):
+        let left = c.startswith(":")
+        let right = c.endswith(":")
+        if left and right:
+            out.append("center")
+        elif right:
+            out.append("right")
+        else:
+            out.append("left")
+    return out
+
+fn startsBlock(s):
+    if s == "":
+        return True
+    if s.startswith("#") or s.startswith(">") or s.startswith("```") or s.startswith("|"):
+        return True
+    return isHr(s)
+
+fn parse(text):
+    let out = []
+    let lines = text.split("\n")
+    let n = len(lines)
+    let i = 0
+    while i < n:
+        let raw = lines[i]
+        let t = raw.strip()
+        let ln = i + 1
+
+        # fenced code
+        if t.startswith("```"):
+            let lang = t[3:].strip()
+            let buf = []
+            i += 1
+            while i < n and not lines[i].strip().startswith("```"):
+                buf.append(lines[i])
+                i += 1
+            i += 1
+            out.append({"kind": "code", "lang": lang, "text": buf.join("\n"), "line": ln})
+            continue
+
+        if t == "":
+            i += 1
+            continue
+
+        if isHr(t):
+            out.append({"kind": "hr", "text": "", "line": ln})
+            i += 1
+            continue
+
+        let hl = headingLevel(t)
+        if hl > 0:
+            out.append({"kind": "h" + str(hl), "text": stripInline(t[hl + 1:].strip()), "line": ln})
+            i += 1
+            continue
+
+        # pipe table: a header row followed by an |---|---| separator
+        if t.startswith("|") and i + 1 < n and isTableSep(lines[i + 1]):
+            let header = splitRow(t)
+            let align = alignRow(lines[i + 1])
+            let rows = []
+            i += 2
+            while i < n and lines[i].strip().startswith("|"):
+                rows.append(splitRow(lines[i].strip()))
+                i += 1
+            out.append({
+                "kind": "table",
+                "header": header,
+                "align": align,
+                "rows": rows,
+                "cols": len(header),
+                "line": ln,
+            })
+            continue
+
+        # blockquote, merged until the quote ends
+        if t.startswith(">"):
+            let buf = []
+            let level = 1
+            let first = True
+            while i < n and lines[i].strip().startswith(">"):
+                let s = lines[i].strip()
+                let lv = 0
+                while lv < len(s) and s[lv] == ">":
+                    lv += 1
+                if first:
+                    level = lv
+                    first = False
+                let rest = s[lv:]
+                if rest.startswith(" "):
+                    rest = rest[1:]
+                buf.append(rest)
+                i += 1
+            out.append({"kind": "quote", "level": level, "text": stripInline(joinSoft(buf)), "line": ln})
+            continue
+
+        let item = listInfo(raw)
+        if item != None:
+            out.append({
+                "kind": "li",
+                "text": stripInline(item.get("text")),
+                "level": item.get("level"),
+                "ordered": item.get("ordered"),
+                "num": item.get("num"),
+                "task": item.get("task"),
+                "line": ln,
+            })
+            i += 1
+            continue
+
+        # paragraph, soft-wrapped until the next block starts
+        let buf = [t]
+        i += 1
+        while i < n:
+            let s = lines[i].strip()
+            if startsBlock(s) or listInfo(lines[i]) != None:
+                break
+            buf.append(s)
+            i += 1
+        out.append({"kind": "p", "text": stripInline(joinSoft(buf)), "line": ln})
+    return out

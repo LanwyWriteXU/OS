@@ -4,27 +4,46 @@
       <Label class="calc-expr" text="{expr == '' ? ' ' : expr}"/>
       <Label class="calc-value" text="{display}"/>
     </VBox>
-    <Grid class="calc-grid" cols="4">
-      <Button class="calc-key fn" text="C" onclick="press('C')"/>
-      <Button class="calc-key fn" text="(" onclick="press('(')"/>
-      <Button class="calc-key fn" text=")" onclick="press(')')"/>
-      <Button class="calc-key fn" text="⌫" onclick="press('back')"/>
-      <Button class="calc-key" text="7" onclick="press('7')"/>
-      <Button class="calc-key" text="8" onclick="press('8')"/>
-      <Button class="calc-key" text="9" onclick="press('9')"/>
-      <Button class="calc-key op" text="÷" onclick="press('/')"/>
-      <Button class="calc-key" text="4" onclick="press('4')"/>
-      <Button class="calc-key" text="5" onclick="press('5')"/>
-      <Button class="calc-key" text="6" onclick="press('6')"/>
-      <Button class="calc-key op" text="×" onclick="press('*')"/>
-      <Button class="calc-key" text="1" onclick="press('1')"/>
-      <Button class="calc-key" text="2" onclick="press('2')"/>
-      <Button class="calc-key" text="3" onclick="press('3')"/>
-      <Button class="calc-key op" text="−" onclick="press('-')"/>
-      <Button class="calc-key" text="0" onclick="press('0')"/>
-      <Button class="calc-key" text="." onclick="press('.')"/>
-      <Button class="calc-key op" text="+" onclick="press('+')"/>
-      <Button class="calc-key eq" text="=" onclick="press('=')"/>
-    </Grid>
+
+    <HBox class="calc-body" flex="1">
+      <!-- scientific panel: only mounted when the window is wide -->
+      <Grid class="calc-sci" cols="2" if="{sci}">
+        <Button class="calc-key sci" text="sin" onclick="press('math.sin(')"/>
+        <Button class="calc-key sci" text="cos" onclick="press('math.cos(')"/>
+        <Button class="calc-key sci" text="tan" onclick="press('math.tan(')"/>
+        <Button class="calc-key sci" text="ln" onclick="press('math.log(')"/>
+        <Button class="calc-key sci" text="log" onclick="press('math.log10(')"/>
+        <Button class="calc-key sci" text="√" onclick="press('math.sqrt(')"/>
+        <Button class="calc-key sci" text="x²" onclick="press('**2')"/>
+        <Button class="calc-key sci" text="xʸ" onclick="press('**')"/>
+        <Button class="calc-key sci" text="π" onclick="press('math.pi')"/>
+        <Button class="calc-key sci" text="e" onclick="press('math.e')"/>
+        <Button class="calc-key sci" text="1/x" onclick="press('1/')"/>
+        <Button class="calc-key sci" text="n!" onclick="press('math.fact(')"/>
+      </Grid>
+
+      <Grid class="calc-grid" cols="4">
+        <Button class="calc-key fn" text="C" onclick="press('C')"/>
+        <Button class="calc-key fn" text="(" onclick="press('(')"/>
+        <Button class="calc-key fn" text=")" onclick="press(')')"/>
+        <Button class="calc-key fn" text="⌫" onclick="press('back')"/>
+        <Button class="calc-key" text="7" onclick="press('7')"/>
+        <Button class="calc-key" text="8" onclick="press('8')"/>
+        <Button class="calc-key" text="9" onclick="press('9')"/>
+        <Button class="calc-key op" text="÷" onclick="press('/')"/>
+        <Button class="calc-key" text="4" onclick="press('4')"/>
+        <Button class="calc-key" text="5" onclick="press('5')"/>
+        <Button class="calc-key" text="6" onclick="press('6')"/>
+        <Button class="calc-key op" text="×" onclick="press('*')"/>
+        <Button class="calc-key" text="1" onclick="press('1')"/>
+        <Button class="calc-key" text="2" onclick="press('2')"/>
+        <Button class="calc-key" text="3" onclick="press('3')"/>
+        <Button class="calc-key op" text="−" onclick="press('-')"/>
+        <Button class="calc-key" text="0" onclick="press('0')"/>
+        <Button class="calc-key" text="." onclick="press('.')"/>
+        <Button class="calc-key op" text="+" onclick="press('+')"/>
+        <Button class="calc-key eq" text="=" onclick="press('=')"/>
+      </Grid>
+    </HBox>
   </VBox>
 </Window>

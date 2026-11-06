@@ -1,0 +1,37 @@
+# hello.osl — the smallest useful OSL/OML application.
+#
+# Copy this folder, rename the files and the id, and you have your own app.
+# The full walkthrough is in /usr/share/doc/apps.md (Language Docs app).
+
+let name = "world"
+let count = 0
+let log = []
+let file = "/home/user/Documents/hello.json"
+
+# Restore the counter the last time this app ran.
+if fs.exists(file):
+    try:
+        let saved = fs.readJson(file)
+        if saved != None:
+            count = saved.get("count", 0)
+    except e:
+        count = 0
+
+fn save():
+    fs.writeJson(file, {"count": count})
+
+fn bump():
+    count += 1
+    log.append(t("Clicked") + " ×" + str(count))
+    save()
+    refresh()
+
+fn greet():
+    log.append(t("Hello") + ", " + name + "!")
+    refresh()
+
+fn clear():
+    count = 0
+    log = []
+    save()
+    refresh()

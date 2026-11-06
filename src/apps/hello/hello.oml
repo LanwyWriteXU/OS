@@ -1,0 +1,27 @@
+<Window title="Hello" icon="sparkles">
+  <VBox class="hello" pad="16" gap="12">
+    <Label class="ui-title" text="Hello, OSL"/>
+    <Label class="ui-muted" text="This is the template app — every line is commented in /usr/share/apps/hello."/>
+
+    <HBox gap="8" align="center">
+      <Input bind="name" placeholder="Your name" flex="1"/>
+      <Button text="Greet" variant="primary" onclick="greet()"/>
+    </HBox>
+
+    <HBox gap="8" align="center">
+      <Label text="{t('{0} clicks', count)}" flex="1"/>
+      <Button icon="plus" text="Click me" onclick="bump()"/>
+      <Button icon="trash" text="Reset" variant="ghost" onclick="clear()"/>
+    </HBox>
+
+    <Scroll class="hello-log" flex="1">
+      <For each="log" as="line">
+        <Label class="hello-line" text="{line}"/>
+      </For>
+      <VBox class="empty" if="{len(log) == 0}">
+        <Icon name="sparkles" size="30"/>
+        <Label text="Nothing yet — press a button"/>
+      </VBox>
+    </Scroll>
+  </VBox>
+</Window>

@@ -43,6 +43,8 @@ export interface WindowHandle {
   toggleFullscreen(): void;
   isFullscreen(): boolean;
   isMaximized(): boolean;
+  /** Current client size in CSS pixels — read it on refresh to adapt layout. */
+  size(): { width: number; height: number };
 }
 
 export interface UiBridge {

@@ -6,7 +6,17 @@ import shellOml from '../system/shell.oml?raw';
 import shellOsl from '../system/shell.osl?raw';
 import dialogOml from '../system/dialog.oml?raw';
 import menuOml from '../system/menu.oml?raw';
+import markdownOsl from '../system/markdown.osl?raw';
+import helloOml from '../apps/hello/hello.oml?raw';
+import helloOsl from '../apps/hello/hello.osl?raw';
+import docOslEn from '../docs/osl.md?raw';
+import docOslZh from '../docs/osl.zh.md?raw';
+import docOmlEn from '../docs/oml.md?raw';
+import docOmlZh from '../docs/oml.zh.md?raw';
+import docAppsEn from '../docs/apps.md?raw';
+import docAppsZh from '../docs/apps.zh.md?raw';
 import { Vfs, basename } from './fs';
+import { SystemManifest } from './manifest';
 import { SettingsStore } from './settings';
 import { WindowManager, type ManagedWindow } from './wm';
 import { Overlays } from '../oml/overlay';
@@ -64,12 +74,17 @@ export class Kernel implements KernelApi {
   private audioCtx: AudioContext | null = null;
   /** Metadata loaded from /etc/apps.json (name, icon, size, hidden). */
   private appMeta = new Map<string, any>();
+  /** Apps declared only in /etc/apps.json and living in the VFS. */
+  private extraApps: AppDef[] = [];
   /** Icons read from /usr/share/icons, cached until the file system changes. */
   private iconCache = new Map<string, string | null>();
+  /** Tracks the system-owned files that live in the VFS (see manifest.ts). */
+  private manifest!: SystemManifest;
   /** Real IndexedDB quota/usage, read once at boot (bytes). */
   private storageQuota = { supported: false, usage: 0, quota: 0 };
 
   constructor(public vfs: Vfs, public settings: SettingsStore) {
+    this.manifest = new SystemManifest(vfs);
     this.loadRecent();
     this.overlays = new Overlays(this.makeSystemHost());
     // Icons are ordinary files: /usr/share/icons/<name>.svg wins over the
@@ -322,8 +337,13 @@ export class Kernel implements KernelApi {
 
   /* ------------------------------------------------------------ windows */
 
+  /** Bundled application or one installed into /usr/share/apps by the user. */
+  appDef(appId: string): AppDef | undefined {
+    return getApp(appId) ?? this.extraApps.find((a) => a.id === appId);
+  }
+
   open(appId: string, rawArgs?: Record<string, any> | Map<string, any>) {
-    const app = getApp(appId);
+    const app = this.appDef(appId);
     if (!app) {
       this.notify('OS', `Unknown application: ${appId}`, 'alert');
       return;
@@ -335,6 +355,8 @@ export class Kernel implements KernelApi {
       icon: meta.icon,
       width: meta.width,
       height: meta.height,
+      minWidth: meta.minWidth,
+      minHeight: meta.minHeight,
     });
 
     const args = new Map<string, any>();
@@ -377,7 +399,12 @@ export class Kernel implements KernelApi {
     ui = new UiInstance(win.body, interp, host);
     const inst: AppInstance = { win, interp, ui, timers };
     this.instances.set(win.id, inst);
+    // Apps read win.size() on refresh, so a resize must repaint them:
+    // that is what makes responsive layouts (basic ⇄ scientific) work.
+    const resizeObserver = new ResizeObserver(() => ui.scheduleRefresh());
+    resizeObserver.observe(win.el);
     win.onClose = () => {
+      resizeObserver.disconnect();
       this.instances.delete(win.id);
       for (const t of timers) clearInterval(t);
       this.log('app', `close ${app.id}`);
@@ -388,6 +415,13 @@ export class Kernel implements KernelApi {
     // fall back to the bundled source if the file was removed.
     const oslPath = `/usr/share/apps/${app.id}/${app.id}.osl`;
     const omlPath = `/usr/share/apps/${app.id}/${app.id}.oml`;
+    // Re-check right before loading: during development the bundle can change
+    // while the page stays open, and an untouched copy must never shadow it.
+    const synced = [
+      this.manifest.install(oslPath, app.osl),
+      this.manifest.install(omlPath, app.oml),
+    ];
+    if (synced.includes('updated') || synced.includes('created')) this.manifest.save();
     const oslSrc = this.vfs.exists(oslPath) ? this.vfs.read(oslPath) : app.osl;
     const omlSrc = this.vfs.exists(omlPath) ? this.vfs.read(omlPath) : app.oml;
 
@@ -448,7 +482,7 @@ export class Kernel implements KernelApi {
   }
 
   apps(): AppInfo[] {
-    return APPS.filter((a) => !this.metaFor(a).hidden).map((a) => {
+    return [...APPS, ...this.extraApps].filter((a) => !this.metaFor(a).hidden).map((a) => {
       const meta = this.metaFor(a);
       return { id: a.id, name: tr(meta.name), icon: meta.icon };
     });
@@ -462,6 +496,8 @@ export class Kernel implements KernelApi {
       icon: typeof m.icon === 'string' && m.icon ? m.icon : app.icon,
       width: Number(m.width) > 0 ? Number(m.width) : app.width,
       height: Number(m.height) > 0 ? Number(m.height) : app.height,
+      minWidth: Number(m.minWidth) > 0 ? Number(m.minWidth) : app.minWidth,
+      minHeight: Number(m.minHeight) > 0 ? Number(m.minHeight) : app.minHeight,
       hidden: m.hidden === undefined ? !!app.hidden : !!m.hidden,
     };
   }
@@ -488,15 +524,36 @@ export class Kernel implements KernelApi {
   /** Reads /etc/apps.json, the editable application registry. */
   private loadAppRegistry() {
     this.appMeta.clear();
+    this.extraApps = [];
     const p = '/etc/apps.json';
     if (!this.vfs.exists(p)) return;
     try {
       const data = JSON.parse(this.vfs.read(p));
       const list = Array.isArray(data) ? data : data?.apps;
-      if (Array.isArray(list)) {
-        for (const entry of list) {
-          if (entry && typeof entry.id === 'string') this.appMeta.set(entry.id, entry);
+      if (!Array.isArray(list)) return;
+      for (const entry of list) {
+        if (!entry || typeof entry.id !== 'string') continue;
+        this.appMeta.set(entry.id, entry);
+        // An entry that is not part of the bundle is a user-installed app: it
+        // lives in /usr/share/apps/<id>/ and is loaded straight from the VFS.
+        if (getApp(entry.id)) continue;
+        const oslPath = `/usr/share/apps/${entry.id}/${entry.id}.osl`;
+        const omlPath = `/usr/share/apps/${entry.id}/${entry.id}.oml`;
+        if (!this.vfs.exists(oslPath) || !this.vfs.exists(omlPath)) {
+          this.log('error', `apps.json: ${entry.id} has no source files`);
+          continue;
         }
+        this.extraApps.push({
+          id: entry.id,
+          name: typeof entry.name === 'string' && entry.name ? entry.name : entry.id,
+          icon: typeof entry.icon === 'string' && entry.icon ? entry.icon : 'app-about',
+          width: Number(entry.width) > 0 ? Number(entry.width) : 680,
+          height: Number(entry.height) > 0 ? Number(entry.height) : 480,
+          minWidth: Number(entry.minWidth) > 0 ? Number(entry.minWidth) : 420,
+          minHeight: Number(entry.minHeight) > 0 ? Number(entry.minHeight) : 300,
+          osl: this.vfs.read(oslPath),
+          oml: this.vfs.read(omlPath),
+        });
       }
     } catch (e: any) {
       this.log('error', `apps.json: ${e?.message ?? e}`);
@@ -614,7 +671,7 @@ export class Kernel implements KernelApi {
     // A .desktop file is a shortcut: its content is an application id.
     if (/\.desktop$/i.test(path)) {
       const appId = this.vfs.read(path).trim();
-      if (getApp(appId)) {
+      if (this.appDef(appId)) {
         this.open(appId);
         return;
       }
@@ -752,14 +809,18 @@ export class Kernel implements KernelApi {
    */
   private seedSystemFiles() {
     const marker = '/etc/apps-seed';
-    const version = '10';
-    if (this.vfs.exists(marker) && this.vfs.read(marker).trim() === version) return;
+    const version = '14';
+    // A version bump forces one refresh (so a new bundle always wins once);
+    // afterwards every boot only touches files the user never edited.
+    const force = !(this.vfs.exists(marker) && this.vfs.read(marker).trim() === version);
+    this.manifest.load();
     for (const d of [
       '/usr',
       '/usr/share',
       '/usr/share/applications',
       '/usr/share/apps',
       '/usr/share/os',
+      '/usr/share/os/lib',
       '/usr/share/i18n',
       '/usr/share/icons',
     ]) {
@@ -768,17 +829,27 @@ export class Kernel implements KernelApi {
     for (const app of APPS) {
       const dir = `/usr/share/apps/${app.id}`;
       this.vfs.mkdir(dir, true, true);
-      this.vfs.write(`${dir}/${app.id}.osl`, app.osl);
-      this.vfs.write(`${dir}/${app.id}.oml`, app.oml);
-      this.vfs.write(
+      this.manifest.install(`${dir}/${app.id}.osl`, app.osl, force);
+      this.manifest.install(`${dir}/${app.id}.oml`, app.oml, force);
+      // app.json is metadata the user may tune, so it is created once.
+      if (!this.vfs.exists(`${dir}/app.json`)) this.vfs.write(
         `${dir}/app.json`,
         JSON.stringify(
-          { id: app.id, name: app.name, icon: app.icon, width: app.width, height: app.height, hidden: !!app.hidden },
+          {
+            id: app.id,
+            name: app.name,
+            icon: app.icon,
+            width: app.width,
+            height: app.height,
+            minWidth: app.minWidth,
+            minHeight: app.minHeight,
+            hidden: !!app.hidden,
+          },
           null,
           2,
         ),
       );
-      this.vfs.write(`/usr/share/applications/${app.id}.desktop`, `${app.id}\n`);
+      this.manifest.install(`/usr/share/applications/${app.id}.desktop`, `${app.id}\n`, force);
     }
     // The editable app registry. Kept if it already exists so user edits survive.
     if (!this.vfs.exists('/etc/apps.json')) {
@@ -794,6 +865,8 @@ export class Kernel implements KernelApi {
               icon: a.icon,
               width: a.width,
               height: a.height,
+              minWidth: a.minWidth,
+              minHeight: a.minHeight,
               hidden: !!a.hidden,
             })),
           },
@@ -802,18 +875,22 @@ export class Kernel implements KernelApi {
         ),
       );
     }
-    this.vfs.write(
+    this.manifest.install(
       '/usr/share/apps/README.md',
-      `# System applications\n\nEvery built-in app lives here as a pair of files://n//n- \`<app>.oml\` — the interface, described in OML\n- \`<app>.osl\` — the behaviour, written in OSL\n\nLaunch entries live in \`/usr/share/applications/*.desktop\`.\nEditing these copies does not change the running apps; copy them into\n\`~/Projects\` to experiment.\n`,
+      `# System applications\n\nEvery built-in app lives here as a pair of files:\n\n- \`<app>.oml\` — the interface, described in OML\n- \`<app>.osl\` — the behaviour, written in OSL\n\nLaunch entries live in \`/usr/share/applications/*.desktop\`.\nThe kernel runs these copies, so an edit here changes the running app after\na refresh; the manifest in \`/etc/system-manifest.json\` keeps your edits safe\nacross upgrades.\n`,
+      force,
     );
     // The shell is just another pair of OSL/OML files.
-    this.vfs.write('/usr/share/os/shell.osl', shellOsl);
-    this.vfs.write('/usr/share/os/shell.oml', shellOml);
-    this.vfs.write('/usr/share/os/dialog.oml', dialogOml);
-    this.vfs.write('/usr/share/os/menu.oml', menuOml);
-    this.vfs.write(
+    this.manifest.install('/usr/share/os/shell.osl', shellOsl, force);
+    this.manifest.install('/usr/share/os/shell.oml', shellOml, force);
+    this.manifest.install('/usr/share/os/dialog.oml', dialogOml, force);
+    this.manifest.install('/usr/share/os/menu.oml', menuOml, force);
+    // The Markdown reader is a library, not an app: Notes, Preview and the
+    // manual all import this one file.
+    this.manifest.install('/usr/share/os/lib/markdown.osl', markdownOsl, force);
+    this.manifest.install(
       '/usr/share/os/README.md',
-      `# System sources\n\n- \`shell.osl\` / \`shell.oml\` — the desktop, taskbar and dock\n- \`dialog.oml\` / \`menu.oml\` — dialogs and context menus\n- \`/usr/share/apps/<id>/\` — one folder per application\n- \`/usr/share/icons/*.svg\` — every icon, editable and overridable\n- \`/usr/share/i18n/*.json\` — UI translations\n\nUse \`i18n.reload()\` in OSL to re-read the catalogues after editing them.\n`,
+      `# System sources\n\n- \`shell.osl\` / \`shell.oml\` — the desktop, taskbar and dock\n- \`dialog.oml\` / \`menu.oml\` — dialogs and context menus\n- \`lib/markdown.osl\` — the Markdown reader shared by Notes, Preview and Docs\n- \`/usr/share/apps/<id>/\` — one folder per application\n- \`/usr/share/icons/*.svg\` — every icon, editable and overridable\n- \`/usr/share/i18n/*.json\` — UI translations\n\nUse \`i18n.reload()\` in OSL to re-read the catalogues after editing them.\n\n## Upgrading\n\nThe kernel installs these files and records their hashes in\n\`/etc/system-manifest.json\`. On boot an untouched file is refreshed from\nthe bundle, while a file you edited is left alone — so local changes survive\nan upgrade. Delete a file to get the shipped copy back.\n`,
     );
     // Never clobber translations a user may have edited by hand.
     for (const lang of ['en', 'zh'] as Lang[]) {
@@ -824,12 +901,12 @@ export class Kernel implements KernelApi {
     // and overridable per install. Like the app sources it is owned by the
     // system, so a seed-version bump refreshes it.
     for (const [name, svg] of Object.entries(bundledIcons())) {
-      this.vfs.write(`/usr/share/icons/${name}.svg`, svg);
+      this.manifest.install(`/usr/share/icons/${name}.svg`, svg, force);
     }
     // 1.1.9 briefly mirrored the stylesheets here; an OS that only interprets
     // OSL/OML has no use for them, so drop the folder again.
     if (this.vfs.exists('/usr/share/os/styles')) this.vfs.remove('/usr/share/os/styles');
-    this.vfs.write(
+    this.manifest.install(
       '/usr/share/icons/README.md',
       '# Icons\n\n' +
         'Every icon is an SVG named after its icon id. `iconSvg()` prefers this\n' +
@@ -843,7 +920,64 @@ export class Kernel implements KernelApi {
         'The same id works anywhere an icon name is accepted: desktop shortcuts,\n' +
         'notifications, window titles, `.desktop` entries.\n',
     );
+    // The language reference: plain markdown, editable from Files and read by
+    // the Language Docs app.
+    this.vfs.mkdir('/usr/share/doc', true, true);
+    const docs: Array<[string, string]> = [
+      ['osl.md', docOslEn],
+      ['osl.zh.md', docOslZh],
+      ['oml.md', docOmlEn],
+      ['oml.zh.md', docOmlZh],
+      ['apps.md', docAppsEn],
+      ['apps.zh.md', docAppsZh],
+    ];
+    for (const [name, text] of docs) this.manifest.install(`/usr/share/doc/${name}`, text, force);
+
+    // A copy-me template for user applications (see /usr/share/doc/apps.md).
+    this.vfs.mkdir('/usr/share/apps/hello', true, true);
+    this.manifest.install('/usr/share/apps/hello/hello.osl', helloOsl, force);
+    this.manifest.install('/usr/share/apps/hello/hello.oml', helloOml, force);
+    if (!this.vfs.exists('/usr/share/apps/hello/app.json')) this.vfs.write(
+      '/usr/share/apps/hello/app.json',
+      JSON.stringify(
+        { id: 'hello', name: 'Hello', icon: 'sparkles', width: 560, height: 470, minWidth: 420, minHeight: 360 },
+        null,
+        2,
+      ),
+    );
+    this.manifest.install('/usr/share/applications/hello.desktop', 'hello\n', force);
+    this.ensureDemoApp();
+
+    this.manifest.save();
     this.vfs.write(marker, version);
+  }
+
+  /**
+   * /etc/apps.json survives upgrades, so an install created before the tutorial
+   * app existed needs the entry appended once. Anything unparsable is left
+   * untouched.
+   */
+  private ensureDemoApp() {
+    const p = '/etc/apps.json';
+    if (!this.vfs.exists(p)) return;
+    try {
+      const data = JSON.parse(this.vfs.read(p));
+      const list: any[] = Array.isArray(data) ? data : data?.apps;
+      if (!Array.isArray(list)) return;
+      if (list.some((e) => e && e.id === 'hello')) return;
+      list.push({
+        id: 'hello',
+        name: 'Hello',
+        icon: 'sparkles',
+        width: 560,
+        height: 470,
+        minWidth: 420,
+        minHeight: 360,
+      });
+      this.vfs.write(p, JSON.stringify(Array.isArray(data) ? list : { ...data, apps: list }, null, 2));
+    } catch {
+      /* a hand-edited registry that does not parse is left alone */
+    }
   }
 
   /** Loads /usr/share/i18n/*.json over the bundled catalogues. */
@@ -885,6 +1019,7 @@ export class Kernel implements KernelApi {
       toggleFullscreen: () => this.wm.toggleFullscreen(win),
       isFullscreen: () => win.fullscreen,
       isMaximized: () => win.maximized,
+      size: () => ({ width: Math.round(win.rect.width), height: Math.round(win.rect.height) }),
     };
   }
 
@@ -903,6 +1038,7 @@ export class Kernel implements KernelApi {
       toggleFullscreen: () => {},
       isFullscreen: () => false,
       isMaximized: () => false,
+      size: () => ({ width: 0, height: 0 }),
     };
     const host: Host = {
       vfs: this.vfs,

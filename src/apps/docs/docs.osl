@@ -1,0 +1,210 @@
+# docs.osl — the language reference, laid out like the Python manual:
+# a navigation column on the left (chapters and their sections, searchable) and
+# the rendered chapter on the right.
+#
+# Everything here is OSL. The chapters are plain markdown in /usr/share/doc, so
+# the manual can be edited, extended or translated from the file manager.
+
+import "/usr/share/os/lib/markdown.osl" as md
+
+let chapters = [
+    {"file": "osl", "icon": "code", "en": "OSL — scripting", "zh": "OSL — 脚本语言"},
+    {"file": "oml", "icon": "layers", "en": "OML — interface", "zh": "OML — 界面标记"},
+    {"file": "apps", "icon": "apps", "en": "Building an app", "zh": "开发一个小软件"},
+]
+
+let file = args.get("chapter")
+if file == None or file == "":
+    file = "osl"
+let lang = args.get("lang")
+if lang == None or lang == "":
+    lang = sys.settings().get("lang")
+if lang != "zh":
+    lang = "en"
+
+let blocks = []
+let tree = []
+let cache = {}
+let results = []
+let query = ""
+let focusIdx = -1
+let docPath = ""
+let lines = 0
+
+# ------------------------------------------------------------ helpers
+
+fn pathFor(f):
+    let base = paths.join("/usr/share/doc", f)
+    if lang == "zh":
+        return base + ".zh.md"
+    return base + ".md"
+
+fn label(c):
+    return lang == "zh" ? c.get("zh") : c.get("en")
+
+fn currentPath():
+    return docPath
+
+fn sectionName():
+    if focusIdx < 0 or focusIdx >= len(blocks):
+        return ""
+    return blocks[focusIdx].get("text")
+
+fn liMark(b):
+    let task = b.get("task")
+    if task == "done":
+        return "☑"
+    if task == "open":
+        return "☐"
+    if b.get("ordered"):
+        return str(b.get("num")) + "."
+    return "•"
+
+fn blocksOf(f):
+    if cache.has(f):
+        return cache.get(f)
+    let out = []
+    let p = pathFor(f)
+    if fs.exists(p):
+        out = md.parse(fs.read(p))
+    cache.set(f, out)
+    return out
+
+# Chapters are rendered whole; the tree is derived from the ## / ### blocks so
+# that a section click can scroll straight to that block index.
+fn buildTree():
+    cache = {}
+    tree = []
+    for c in chapters:
+        let b = blocksOf(c.file)
+        let secs = []
+        let i = 0
+        for x in b:
+            let k = x.get("kind")
+            if k == "h2" or k == "h3":
+                secs.append({"text": x.get("text"), "level": k == "h3" ? 3 : 2, "index": i})
+            i += 1
+        tree.append({"file": c.file, "icon": c.icon, "title": label(c), "sections": secs})
+
+# ------------------------------------------------------------ navigation
+
+fn load():
+    docPath = pathFor(file)
+    blocks = blocksOf(file)
+    if fs.exists(docPath):
+        lines = len(fs.read(docPath).split("\n"))
+    else:
+        lines = 0
+
+fn openChapter(f):
+    file = f
+    focusIdx = -1
+    query = ""
+    results = []
+    load()
+    refresh()
+
+fn openSection(f, idx):
+    if f != file:
+        file = f
+        load()
+    query = ""
+    results = []
+    # Clicking the section that is already focused should still scroll back to
+    # it, so bounce through "top" first: both focus targets settle in the same
+    # animation frame and the section wins.
+    if idx == focusIdx:
+        focusIdx = -1
+        refresh()
+    focusIdx = idx
+    refresh()
+
+fn openResult(r):
+    if r.get("file") != file:
+        file = r.get("file")
+        load()
+    query = ""
+    results = []
+    let target = r.get("line")
+    let idx = -1
+    let n = 0
+    for b in blocks:
+        if b.get("line") <= target:
+            idx = n
+        n += 1
+    focusIdx = idx
+    refresh()
+
+fn toggleLang():
+    lang = lang == "zh" ? "en" : "zh"
+    focusIdx = -1
+    query = ""
+    results = []
+    buildTree()
+    load()
+    refresh()
+
+fn openSource():
+    if docPath != "" and fs.exists(docPath):
+        sys.open("notes", {"path": docPath})
+
+fn openTutorial():
+    openChapter("apps")
+
+# ------------------------------------------------------------ search
+
+fn doSearch():
+    results = []
+    let q = query.strip().lower()
+    if len(q) >= 2:
+        for c in chapters:
+            let p = pathFor(c.file)
+            if not fs.exists(p):
+                continue
+            let sec = ""
+            let i = 0
+            for line in fs.read(p).split("\n"):
+                i += 1
+                let s = line.strip()
+                if s == "":
+                    continue
+                if s.startswith("### "):
+                    sec = md.plain(s[4:])
+                    continue
+                if s.startswith("## "):
+                    sec = md.plain(s[3:])
+                    continue
+                if s.startswith("# ") or s.startswith("```"):
+                    continue
+                if s.lower().find(q) >= 0:
+                    let text = md.plain(s)
+                    if len(text) > 96:
+                        text = text[:95] + "…"
+                    results.append({
+                        "key": c.file + ":" + str(i),
+                        "file": c.file,
+                        "chapter": label(c),
+                        "section": sec,
+                        "line": i,
+                        "text": text,
+                    })
+                    if len(results) >= 80:
+                        break
+    refresh()
+
+fn hitWhere(r):
+    let sec = r.get("section")
+    if sec == "":
+        return r.get("chapter")
+    return r.get("chapter") + " · " + sec
+
+fn clearSearch():
+    query = ""
+    results = []
+    refresh()
+
+# ------------------------------------------------------------ boot
+
+buildTree()
+load()
+refresh()

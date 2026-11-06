@@ -1,0 +1,117 @@
+<Window title="Language Docs" icon="app-docs">
+  <HBox class="docs">
+    <!-- ---------------------------- navigation ---------------------------- -->
+    <VBox class="docs-side">
+      <HBox class="docs-search">
+        <Icon name="search" size="14"/>
+        <Input class="docs-search-input" bind="query" placeholder="Search the manual" oninput="doSearch()"/>
+        <IconButton icon="x" title="Clear" onclick="clearSearch()" if="{query != ''}"/>
+      </HBox>
+
+      <Scroll class="docs-nav" flex="1">
+        <!-- table of contents: chapters, then their ## and ### sections -->
+        <VBox if="{query == ''}">
+          <For each="tree" as="c" key="c.file">
+            <Button class="docs-chapter {c.file == file ? 'open' : ''}" onclick="openChapter(c.file)">
+              <Icon name="{c.icon}" size="14"/>
+              <Label class="docs-chapter-name" text="{c.title}" flex="1"/>
+              <Label class="docs-count" text="{len(c.sections)}"/>
+            </Button>
+            <For each="c.sections" as="s">
+              <Button class="docs-sec lvl{s.level} {c.file == file and s.index == focusIdx ? 'sel' : ''}" onclick="openSection(c.file, s.index)">
+                <Label class="docs-sec-text" text="{s.text}" flex="1"/>
+              </Button>
+            </For>
+          </For>
+        </VBox>
+
+        <!-- search results replace the tree while a query is active -->
+        <VBox if="{query != ''}">
+          <Label class="docs-nav-title" text="{t('{0} matches', len(results))}"/>
+          <For each="results" as="r" key="r.key">
+            <Button class="docs-hit" onclick="openResult(r)">
+              <VBox class="docs-hit-body" flex="1" align="start">
+                <Label class="docs-hit-where" text="{hitWhere(r)}"/>
+                <Label class="docs-hit-text" text="{r.text}"/>
+              </VBox>
+            </Button>
+          </For>
+          <VBox class="docs-nav-empty" if="{len(results) == 0}">
+            <Label text="No matches"/>
+          </VBox>
+        </VBox>
+      </Scroll>
+
+      <HBox class="docs-side-foot">
+        <Button icon="pen" text="Edit source" variant="ghost" onclick="openSource()"/>
+        <Spacer/>
+        <Button class="docs-lang" variant="ghost" text="{lang == 'zh' ? 'EN' : '中文'}" onclick="toggleLang()"/>
+      </HBox>
+    </VBox>
+
+    <!-- ------------------------------ content ----------------------------- -->
+    <VBox class="docs-main" flex="1">
+      <HBox class="docs-bar">
+        <Icon name="book" size="14"/>
+        <Label class="docs-path" text="{currentPath()}" flex="1"/>
+        <Label class="docs-section" text="{sectionName()}" if="{sectionName() != ''}"/>
+        <Button icon="sparkles" text="Tutorial" variant="ghost" onclick="openTutorial()"/>
+      </HBox>
+
+      <Scroll class="docs-body" flex="1">
+        <VBox class="md docs-md">
+          <!-- focus targets: turning true scrolls the block into view -->
+          <Div class="docs-anchor" tabindex="-1" focus="{focusIdx < 0}"/>
+
+          <For each="blocks" as="b" index="i" key="i">
+            <Div class="docs-anchor" tabindex="-1" focus="{i == focusIdx}"/>
+
+            <Label class="md-h1" text="{b.text}" if="{b.kind == 'h1'}"/>
+            <Label class="md-h2" text="{b.text}" if="{b.kind == 'h2'}"/>
+            <Label class="md-h3" text="{b.text}" if="{b.kind == 'h3'}"/>
+            <Label class="md-h4" text="{b.text}" if="{b.kind == 'h4'}"/>
+            <Label class="md-h5" text="{b.text}" if="{b.kind == 'h5'}"/>
+            <Label class="md-h6" text="{b.text}" if="{b.kind == 'h6'}"/>
+            <Label class="md-p" text="{b.text}" if="{b.kind == 'p'}"/>
+
+            <HBox class="md-li lvl{b.level}" if="{b.kind == 'li'}">
+              <Label class="md-mark" text="{liMark(b)}"/>
+              <Label text="{b.text}" flex="1"/>
+            </HBox>
+
+            <HBox class="md-quote lvl{b.level}" if="{b.kind == 'quote'}">
+              <Label text="{b.text}" flex="1"/>
+            </HBox>
+
+            <VBox class="md-code" if="{b.kind == 'code'}">
+              <Label class="md-lang" text="{b.lang}" if="{b.lang != ''}"/>
+              <Label text="{b.text}"/>
+            </VBox>
+
+            <VBox class="md-table" if="{b.kind == 'table'}">
+              <HBox class="md-trow md-thead">
+                <For each="b.header" as="h" index="j">
+                  <Label class="md-th" text="{h}" flex="1" style="text-align:{b.align[j]}"/>
+                </For>
+              </HBox>
+              <For each="b.rows" as="row">
+                <HBox class="md-trow">
+                  <For each="row" as="cell" index="j">
+                    <Label class="md-td" text="{cell}" flex="1" style="text-align:{b.align[j]}"/>
+                  </For>
+                </HBox>
+              </For>
+            </VBox>
+
+            <Divider if="{b.kind == 'hr'}"/>
+          </For>
+        </VBox>
+      </Scroll>
+
+      <HBox class="docs-status">
+        <Label class="docs-hint" text="Chapters are plain markdown in /usr/share/doc" flex="1"/>
+        <Label class="docs-hint" text="{t('{0} lines', lines)}"/>
+      </HBox>
+    </VBox>
+  </HBox>
+</Window>
