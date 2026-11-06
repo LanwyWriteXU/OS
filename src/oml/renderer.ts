@@ -347,6 +347,19 @@ export class UiInstance {
         continue;
       }
 
+      if (name === 'src' && build.kind === 'image') {
+        updates.push(() => {
+          const v = this.interpolate(raw, env);
+          // Only touch the attribute when it really changes: re-assigning an
+          // identical src would refire `load` and re-decode the bitmap.
+          if (el.getAttribute('src') !== v) {
+            if (v) el.setAttribute('src', v);
+            else el.removeAttribute('src');
+          }
+        });
+        continue;
+      }
+
       if (name === 'text') {
         const target = build.kind === 'button' ? (el.querySelector('.btn-text') as HTMLElement) : el;
         const apply = () => {
@@ -629,6 +642,8 @@ export class UiInstance {
         x: (e as MouseEvent).clientX ?? 0,
         y: (e as MouseEvent).clientY ?? 0,
         button: (e as MouseEvent).button ?? 0,
+        deltaY: (e as WheelEvent).deltaY ?? 0,
+        deltaX: (e as WheelEvent).deltaX ?? 0,
         rect: (() => {
           // Use the element the handler is bound to, not the inner SVG/text
           // that happened to be under the pointer.

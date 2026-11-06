@@ -1,0 +1,57 @@
+<Window title="Image Viewer" icon="app-image">
+  <HBox class="viewer" onkeydown="onKey(event)">
+    <VBox class="viewer-side">
+      <HBox class="viewer-side-head">
+        <Icon name="image" size="15"/>
+        <Label class="viewer-side-title" text="{paths.relative(dir)}" flex="1"/>
+        <IconButton icon="folder" title="Show in Files" onclick="browse()"/>
+      </HBox>
+      <Scroll class="viewer-list" flex="1">
+        <For each="images" as="f" key="f.path">
+          <Button class="viewer-item {f.path == path ? 'sel' : ''}" onclick="openImage(f.path)">
+            <Icon name="image" size="15"/>
+            <Label class="viewer-item-name" text="{f.name}" flex="1"/>
+          </Button>
+        </For>
+        <VBox class="empty" if="{len(images) == 0}">
+          <Icon name="image" size="34"/>
+          <Label text="No images in this folder"/>
+          <Button icon="folder" text="Browse…" variant="primary" onclick="browse()"/>
+        </VBox>
+      </Scroll>
+    </VBox>
+
+    <VBox class="viewer-main" flex="1">
+      <HBox class="viewer-bar">
+        <IconButton icon="arrow-left" title="Previous image" onclick="prev()"/>
+        <IconButton icon="arrow-right" title="Next image" onclick="next()"/>
+        <Divider/>
+        <IconButton icon="minus" title="Zoom out" onclick="zoomOut()"/>
+        <Button class="viewer-zoom" text="{zoomText()}" variant="ghost" title="Actual size" onclick="actualSize()"/>
+        <IconButton icon="plus" title="Zoom in" onclick="zoomIn()"/>
+        <IconButton icon="window-maximize" title="Fit to window" onclick="fitWindow()"/>
+        <IconButton icon="refresh" title="Rotate" onclick="rotate()"/>
+        <Spacer/>
+        <Button icon="image" text="Set as wallpaper" variant="primary" onclick="setWallpaper()" if="{src != ''}"/>
+      </HBox>
+
+      <Div class="viewer-stage" onwheel="onWheel(event)" onmousedown="panStart(event)" onmousemove="panMove(event)" onmouseup="panEnd()" ondblclick="fitWindow()">
+        <Div class="viewer-canvas" if="{src != ''}" style="transform: translate({panX}px, {panY}px) rotate({rotation}deg)">
+          <Image class="viewer-img" src="{src}" style="{imgStyle()}" onload="onLoad(event)"/>
+        </Div>
+        <VBox class="viewer-empty" if="{src == ''}">
+          <Icon name="image" size="52"/>
+          <Label text="{path == '' ? t('No image selected') : t('This file is not an image')}"/>
+          <Button icon="folder" text="Open in Files" variant="primary" onclick="browse()"/>
+        </VBox>
+      </Div>
+
+      <HBox class="viewer-status">
+        <Icon name="image" size="13"/>
+        <Label class="viewer-name" text="{title}" flex="1"/>
+        <Label class="viewer-meta" text="{sizeText()}"/>
+        <Label class="viewer-meta" text="{zoomLabel()}"/>
+      </HBox>
+    </VBox>
+  </HBox>
+</Window>

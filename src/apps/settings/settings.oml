@@ -21,7 +21,7 @@
             <Button class="wall-swatch {wallpaper == 'custom' ? 'on' : ''}" if="{wallpaperPath != ''}" style="background-image:url({wallThumb});background-size:cover;background-position:center" onclick="setWall('custom')"/>
           </Grid>
           <HBox class="wall-actions">
-            <Button icon="image" text="Upload image…" onclick="uploadWall()"/>
+            <Button icon="image" text="Choose image…" onclick="uploadWall()"/>
             <Button icon="trash" text="Reset" if="{wallpaper == 'custom'}" onclick="clearWall()"/>
             <Label class="set-desc" text="{t('Light and dark themes use different wallpapers.')}"/>
           </HBox>

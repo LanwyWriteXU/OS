@@ -34,6 +34,9 @@ interface Notification {
 
 const RECENT_KEY = 'os.recent.v1';
 
+/** Extensions the Image Viewer owns. Kept in sync with apps/viewer. */
+const IMAGE_RE = /\.(png|jpe?g|jfif|gif|webp|bmp|svg|avif|ico)$/i;
+
 export class Kernel implements KernelApi {
   wm = new WindowManager();
   overlays!: Overlays;
@@ -593,6 +596,11 @@ export class Kernel implements KernelApi {
       return;
     }
     this.touchRecent(path);
+    // Images get the dedicated viewer; everything else opens as text.
+    if (IMAGE_RE.test(path)) {
+      this.open('viewer', { path });
+      return;
+    }
     this.open('notes', { path });
   }
 
@@ -697,32 +705,9 @@ export class Kernel implements KernelApi {
       prompt: (title, value, onOk) => this.overlays.prompt(title, value, onOk),
       toast: (message, icon) => this.notify('OS', message, icon ?? 'check'),
       menu: (items, onPick, x, y, keep) => this.overlays.menu(items, onPick, x, y, keep),
-      chooseImage: (onPick) => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.style.display = 'none';
-        input.addEventListener('change', () => {
-          const file = input.files?.[0];
-          if (!file) {
-            input.remove();
-            onPick('');
-            return;
-          }
-          const reader = new FileReader();
-          reader.onload = () => {
-            input.remove();
-            onPick(String(reader.result ?? ''));
-          };
-          reader.onerror = () => {
-            input.remove();
-            onPick('');
-          };
-          reader.readAsDataURL(file);
-        });
-        document.body.appendChild(input);
-        input.click();
-      },
+      // Wallpaper / avatar picking runs through the OS file browser instead of
+      // the browser's native file dialog.
+      chooseImage: (onPick) => this.overlays.pickImage(onPick),
     };
   }
 
@@ -732,7 +717,7 @@ export class Kernel implements KernelApi {
    */
   private seedSystemFiles() {
     const marker = '/etc/apps-seed';
-    const version = '7';
+    const version = '8';
     if (this.vfs.exists(marker) && this.vfs.read(marker).trim() === version) return;
     for (const d of [
       '/usr',

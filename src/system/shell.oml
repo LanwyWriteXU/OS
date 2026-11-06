@@ -1,9 +1,9 @@
 <Window title="OS Shell" icon="app-about">
-  <VBox class="shell wall-{wallpaper}" style="{customWall != '' ? 'background-image:url(' + customWall + ');background-size:cover;background-position:center' : ''}" oncontextmenu="desktopMenu(event)" onmousemove="dragMove(event)" onmouseup="dragEnd()">
+  <VBox class="shell wall-{wallpaper}" style="{customWall != '' ? 'background-image:url(' + customWall + ');background-size:cover;background-position:center' : ''}" oncontextmenu="desktopMenu(event)" onmousedown="deskDown(event)" onmousemove="dragMove(event)" onmouseup="dragEnd()">
 
     <!-- macOS menu bar -->
     <HBox class="menubar" if="{style == 'mac'}">
-      <Button class="mb-item logo" onclick="toggleMenu('apple', event)"><Icon name="app-about" size="16"/></Button>
+      <Button class="mb-item logo" onclick="toggleMenu('apple', event)"><Icon name="os-logo" size="16"/></Button>
       <Button class="mb-item" onclick="toggleMenu('app', event)" text="{activeApp}"/>
       <Button class="mb-item" onclick="toggleMenu('file', event)" text="File"/>
       <Button class="mb-item" onclick="toggleMenu('view', event)" text="View"/>
@@ -17,12 +17,15 @@
     <VBox class="workarea" onclick="closeMenus()">
       <VBox class="desk-icons">
         <For each="deskIcons" as="it" key="it.path">
-          <Button class="desk-icon {deskSel == it.path ? 'sel' : ''}" style="left:{posX(it.path)}px;top:{posY(it.path)}px" onmousedown="dragStart(it, event)" onclick="selectDesktop(it.path)" ondblclick="openItem(it)" oncontextmenu="deskIconMenu(it, event)">
+          <Button class="desk-icon {deskSelected(it.path) ? 'sel' : ''}" style="left:{posX(it.path)}px;top:{posY(it.path)}px" onmousedown="dragStart(it, event)" onclick="selectDesktop(it.path, event)" ondblclick="openItem(it)" oncontextmenu="deskIconMenu(it, event)">
             <Icon name="{it.icon}" size="{iconSize}"/>
             <Label text="{it.name}"/>
           </Button>
         </For>
       </VBox>
+
+      <!-- rubber-band selection drawn while dragging on the empty desktop -->
+      <Div class="desk-marquee" if="{mqOn and (mqW > 2 or mqH > 2)}" style="left:{mqX}px;top:{mqY}px;width:{mqW}px;height:{mqH}px"/>
 
       <VBox id="window-layer" class="window-layer"></VBox>
 
@@ -118,7 +121,7 @@
     <!-- Windows taskbar -->
     <HBox class="taskbar" if="{style == 'win'}">
       <Button class="tb-start" onclick="toggleStart()" title="Start">
-        <Icon name="start" size="20"/>
+        <Icon name="os-logo" size="22"/>
       </Button>
       <HBox class="tb-center">
         <For each="taskItems()" as="t" key="t.key">

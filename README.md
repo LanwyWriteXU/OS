@@ -58,7 +58,7 @@ npm run preview
 - **终端**：管道 `|`、重定向 `>` `>>` `<`、`&&` `||` `;`、`$VAR` 展开、Tab 补全、
   历史持久化、ANSI SGR 配色，45+ 条命令，含 `fastfetch`。
 - **应用**：Files、Terminal、Editor、IDE、Notes、Tasks、Calendar、Clock、Preview、
-  Monitor、Logs、Settings、Calculator、About —— 每个应用都是一对 `.oml` + `.osl` 文件。
+  Image Viewer、Monitor、Logs、Settings、Calculator、About —— 每个应用都是一对 `.oml` + `.osl` 文件。
 - **多语言**：中文 / English 界面，词条集中在 `src/i18n`，设置面板可切换。
 - **桌面即文件系统**：`~/Desktop` 下的文件就是桌面图标，`.desktop` 是快捷方式。
   图标可以拖到桌面任意位置，坐标写入 `~/.config/desktop-layout.json`；右键「整理图标」复位。
@@ -71,8 +71,8 @@ npm run preview
   `dialog.oml`、`menu.oml`），语言包在 `/usr/share/i18n/`，启动项在
   `/usr/share/applications/`。文件管理器侧栏都有对应入口。
 - **任务栏 / Dock**：Windows 任务栏支持固定应用（右键开始菜单或任务栏按钮），
-  同一应用的多个窗口会合并成一个按钮并显示数量，点击在窗口之间循环切换；
-  固定按钮可以拖动排序。macOS Dock 同样可增删固定项，并把最小化窗口收进 Dock。
+  同一应用的多个窗口会合并成一个按钮并显示数量，点击在窗口之间循环切换，
+  鼠标悬停时只有两个以上窗口才弹出切换面板；固定按钮可以拖动排序。macOS Dock 同样可增删固定项，并把最小化窗口收进 Dock。
 - **多窗口**：同一个应用可以开任意多个窗口，开始菜单每次点击都会新建一个，
   中键点击任务栏/Dock 图标也可以新建；窗口入口在任务栏/Dock 里按应用分组并显示数量。
   鼠标悬停分组按钮会弹出窗口预览列表，点条目切换，预览里也能直接新建窗口。

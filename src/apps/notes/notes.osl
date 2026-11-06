@@ -3,6 +3,9 @@
 
 let dir = "/home/user/Documents/Notes"
 let files = []
+# Files opened from outside ~/Documents/Notes, so the sidebar always lists
+# whatever is actually open instead of only the Notes folder.
+let external = []
 let sel = ""
 let path = args.get("path")
 if path == None:
@@ -52,6 +55,30 @@ fn loadList():
         for f in fs.list(dir):
             if f.type == "file" and (f.ext == "md" or f.ext == "txt"):
                 files.append(f)
+    for p in external:
+        if fs.exists(p) and not fs.isDir(p) and not listHas(p):
+            files.append({
+                "name": paths.basename(p),
+                "path": p,
+                "type": "file",
+                "ext": paths.extname(p),
+                "size": fs.size(p),
+                "mtime": time.now(),
+            })
+
+fn listHas(p):
+    for f in files:
+        if f.path == p:
+            return True
+    return False
+
+fn rememberExternal(p):
+    if p == "" or paths.dirname(p) == dir:
+        return
+    for e in external:
+        if e == p:
+            return
+    external.append(p)
 
 fn seed():
     let p = paths.join(dir, "Welcome.md")
@@ -70,8 +97,10 @@ fn openNote(p):
         saveNow()
     sel = p
     path = p
+    rememberExternal(p)
     text = fs.read(p)
     dirty = False
+    loadList()
     setTitle()
     refresh()
 
@@ -180,23 +209,11 @@ fn pickEntry(f):
         pickerPath = f.path
         refresh()
         return
-    if dirty:
-        ui.confirm(t("Discard unsaved changes?"), openAfterConfirm, t("Open file"))
-        sel = f.path
-        return
     openFrom(f.path)
-
-fn openAfterConfirm():
-    openFrom(sel)
 
 fn openFrom(p):
     pickerOpen = False
-    path = p
-    text = fs.read(p)
-    dirty = False
-    loadList()
-    setTitle()
-    refresh()
+    openNote(p)
 
 # ------------------------------------------------------------ context menu
 
@@ -224,11 +241,19 @@ fn noteMenuPick(it):
 fn renameNote(name):
     if name == "" or sel == "":
         return
-    let target = paths.join(dir, name)
+    # Rename in place: an opened file may live outside ~/Documents/Notes.
+    let target = paths.join(paths.dirname(sel), name)
     if fs.exists(target):
         ui.toast(t("Already exists: ") + name, "alert")
         return
     fs.rename(sel, target)
+    let next = []
+    for e in external:
+        if e == sel:
+            next.append(target)
+        else:
+            next.append(e)
+    external = next
     if path == sel:
         path = target
     sel = target

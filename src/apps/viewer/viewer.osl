@@ -1,0 +1,297 @@
+# viewer.osl — the image viewer.
+#
+# Images in the OS file system are stored as data URLs, so a single string is
+# all the <Image> widget needs.
+#
+# Zoom is applied to the image's *layout* size (width/height in CSS px), never
+# with a CSS `scale()` transform: a transform stretches an already rasterised
+# layer and visibly softens the picture. Only pan and rotate use transforms,
+# and those stay sharp.
+
+let path = args.get("path")
+if path == None:
+    path = ""
+let dir = "/home/user/Pictures"
+let images = []
+let src = ""
+let title = ""
+let zoom = 1
+let fitScale = 1
+let dispW = 0
+let dispH = 0
+let rotation = 0
+let panX = 0
+let panY = 0
+let natW = 0
+let natH = 0
+let panning = False
+let pressX = 0
+let pressY = 0
+let baseX = 0
+let baseY = 0
+
+# ------------------------------------------------------------- helpers
+
+fn isImageName(name):
+    let e = paths.extname(name)
+    return e == "png" or e == "jpg" or e == "jpeg" or e == "gif" or e == "webp" or e == "bmp" or e == "svg" or e == "avif" or e == "ico"
+
+fn imageData(p):
+    if p == "" or not fs.exists(p) or fs.isDir(p):
+        return ""
+    let raw = fs.read(p)
+    if raw.startswith("data:image/"):
+        return raw
+    # Source SVGs live as plain text; wrap them so the browser can paint them.
+    if paths.extname(p) == "svg":
+        return "data:image/svg+xml;utf8," + raw.replace("#", "%23")
+    return ""
+
+fn loadDir():
+    images = []
+    if not fs.exists(dir) or not fs.isDir(dir):
+        return
+    for f in fs.list(dir):
+        if f.type == "file" and isImageName(f.name):
+            images.append(f)
+
+fn syncTitle():
+    if path == "":
+        win.setTitle(t("Image Viewer"))
+    else:
+        win.setTitle(title + " — " + t("Image Viewer"))
+
+fn zoomText():
+    return str(math.round(zoom * 100)) + "%"
+
+fn imgStyle():
+    if dispW <= 0 or dispH <= 0:
+        return ""
+    return "width:" + str(dispW) + "px;height:" + str(dispH) + "px"
+
+fn sizeText():
+    if natW > 0 and natH > 0:
+        return str(natW) + " × " + str(natH)
+    return ""
+
+fn zoomLabel():
+    if len(images) == 0:
+        return ""
+    return str(indexOfPath() + 1) + " / " + str(len(images))
+
+fn applySize():
+    if natW > 0:
+        dispW = math.round(natW * zoom)
+        dispH = math.round(natH * zoom)
+
+# ------------------------------------------------------------- open
+
+fn indexOfPath():
+    let i = 0
+    let found = -1
+    for f in images:
+        if f.path == path:
+            found = i
+        i += 1
+    return found
+
+fn openImage(p):
+    if p == "" or not fs.exists(p) or fs.isDir(p):
+        return
+    path = p
+    title = paths.basename(p)
+    let d = paths.dirname(p)
+    if d != dir:
+        dir = d
+        loadDir()
+    src = imageData(p)
+    natW = 0
+    natH = 0
+    dispW = 0
+    dispH = 0
+    zoom = 1
+    rotation = 0
+    panX = 0
+    panY = 0
+    syncTitle()
+    refresh()
+
+fn onLoad(e):
+    natW = e.target.naturalWidth
+    natH = e.target.naturalHeight
+    # Fit the picture inside the stage, but never blow small images up.
+    let stage = e.target.closest(".viewer-stage")
+    fitScale = 1
+    if stage != None and natW > 0 and natH > 0:
+        let box = stage.getBoundingClientRect()
+        let sx = (box.width - 40) / natW
+        let sy = (box.height - 40) / natH
+        fitScale = math.min(sx, sy, 1)
+        if fitScale < 0.02:
+            fitScale = 0.02
+    zoom = fitScale
+    applySize()
+    refresh()
+
+fn browse():
+    sys.open("files", {"path": dir})
+
+fn step(n):
+    if len(images) == 0:
+        return
+    let idx = indexOfPath()
+    if idx < 0:
+        return
+    let next = (idx + n + len(images)) % len(images)
+    openImage(images[next].path)
+
+fn prev():
+    step(-1)
+
+fn next():
+    step(1)
+
+# ------------------------------------------------------------- zoom / pan
+
+fn setZoom(z):
+    if z < 0.02:
+        z = 0.02
+    if z > 16:
+        z = 16
+    zoom = z
+    applySize()
+    refresh()
+
+fn zoomBy(factor):
+    setZoom(zoom * factor)
+
+fn zoomIn():
+    zoomBy(1.25)
+
+fn zoomOut():
+    zoomBy(0.8)
+
+fn actualSize():
+    panX = 0
+    panY = 0
+    setZoom(1)
+
+fn fitWindow():
+    zoom = fitScale
+    panX = 0
+    panY = 0
+    rotation = 0
+    applySize()
+    refresh()
+
+fn rotate():
+    rotation = (rotation + 90) % 360
+    refresh()
+
+fn onWheel(e):
+    e.prevent()
+    if e.deltaY < 0:
+        zoomBy(1.15)
+    else:
+        zoomBy(0.87)
+
+fn panStart(e):
+    if e.button != 0:
+        return
+    panning = True
+    pressX = e.x
+    pressY = e.y
+    baseX = panX
+    baseY = panY
+
+fn panMove(e):
+    if not panning:
+        return
+    panX = baseX + (e.x - pressX)
+    panY = baseY + (e.y - pressY)
+    refresh()
+
+fn panEnd():
+    panning = False
+
+# ------------------------------------------------------------- actions
+
+fn setWallpaper():
+    if path == "" or src == "":
+        ui.toast(t("This file is not an image"), "alert")
+        return
+    let ext = paths.extname(path)
+    if ext == "":
+        ext = "png"
+    let target = "/home/user/.config/wallpaper." + ext
+    fs.write(target, src)
+    sys.setSetting("wallpaperPath", target)
+    sys.setSetting("wallpaper", "custom")
+    ui.toast(t("Wallpaper updated"), "image")
+    refresh()
+
+fn deleteImage():
+    if path == "":
+        return
+    ui.confirm(t('Delete "{0}"?', paths.basename(path)), doDelete, t("Delete"))
+
+fn doDelete():
+    if path == "" or not fs.exists(path):
+        return
+    let name = paths.basename(path)
+    fs.remove(path)
+    path = ""
+    src = ""
+    natW = 0
+    natH = 0
+    dispW = 0
+    dispH = 0
+    loadDir()
+    if len(images) > 0:
+        openImage(images[0].path)
+    else:
+        syncTitle()
+        refresh()
+    ui.toast(t("Deleted ") + name, "trash")
+
+fn onKey(e):
+    if e.key == "+" or e.key == "=":
+        e.prevent()
+        zoomIn()
+    elif e.key == "-":
+        e.prevent()
+        zoomOut()
+    elif e.key == "0":
+        e.prevent()
+        fitWindow()
+    elif e.key == "1":
+        e.prevent()
+        actualSize()
+    elif e.key == "r" or e.key == "R":
+        e.prevent()
+        rotate()
+    elif e.key == "ArrowLeft":
+        e.prevent()
+        prev()
+    elif e.key == "ArrowRight":
+        e.prevent()
+        next()
+    elif e.key == "Delete":
+        e.prevent()
+        deleteImage()
+
+# ------------------------------------------------------------- boot
+
+if path != "":
+    dir = paths.dirname(path)
+loadDir()
+
+if path != "" and fs.exists(path) and not fs.isDir(path):
+    openImage(path)
+elif len(images) > 0:
+    openImage(images[0].path)
+else:
+    syncTitle()
+    refresh()
+
+after(50, syncTitle)

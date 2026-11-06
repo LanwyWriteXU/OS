@@ -6,6 +6,8 @@ import menuSrc from '../system/menu.oml?raw';
 import { Env, Interpreter, native } from '../osl/interp';
 import { UiInstance } from './renderer';
 import { t as tr } from '../i18n';
+import { iconSvg } from '../ui/icons';
+import { basename, dirname, extname } from '../core/fs';
 import type { Host, MenuItem } from '../osl/host';
 
 let pointerX = 0;
@@ -206,5 +208,265 @@ export class Overlays {
       document.addEventListener('mousedown', outside, true);
       document.addEventListener('keydown', onKey);
     }, 0);
+  }
+
+  /* --------------------------------------------------------- image picker */
+
+  private static IMAGE_RE = /\.(png|jpe?g|jfif|gif|webp|bmp|svg|avif|ico)$/i;
+
+  /** Turns an image file in the VFS into something an <img> can render. */
+  imageDataUrl(path: string): string {
+    try {
+      if (!this.host.vfs.exists(path) || this.host.vfs.isDir(path)) return '';
+      const raw = this.host.vfs.read(path);
+      if (/^data:image\//i.test(raw)) return raw;
+      if (extname(path) === 'svg') return 'data:image/svg+xml;utf8,' + raw.replace(/#/g, '%23');
+      return '';
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Image picker that browses the OS file system, not the browser's native
+   * file dialog. Calls back with a data URL, or '' when the user cancels.
+   */
+  pickImage(onPick: (dataUrl: string) => void, start = '/home/user/Pictures') {
+    const vfs = this.host.vfs;
+    const IMAGE_RE = Overlays.IMAGE_RE;
+    let cwd = vfs.exists(start) && vfs.isDir(start) ? start : '/home/user';
+    let selected = '';
+
+    const mask = document.createElement('div');
+    mask.className = 'os-picker-mask';
+    const card = document.createElement('div');
+    card.className = 'os-picker';
+
+    const head = document.createElement('div');
+    head.className = 'os-picker-head';
+    const headIcon = document.createElement('span');
+    headIcon.className = 'os-picker-ico';
+    headIcon.innerHTML = iconSvg('image');
+    const crumb = document.createElement('div');
+    crumb.className = 'os-picker-path';
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'os-picker-x';
+    closeBtn.title = tr('Cancel');
+    closeBtn.innerHTML = iconSvg('x');
+    head.append(headIcon, crumb, closeBtn);
+
+    const body = document.createElement('div');
+    body.className = 'os-picker-body';
+    const side = document.createElement('div');
+    side.className = 'os-picker-side';
+    const list = document.createElement('div');
+    list.className = 'os-picker-list';
+    body.append(side, list);
+
+    const foot = document.createElement('div');
+    foot.className = 'os-picker-foot';
+    const hint = document.createElement('span');
+    hint.className = 'os-picker-hint';
+    hint.textContent = tr('Choose an image');
+    const importBtn = document.createElement('button');
+    importBtn.type = 'button';
+    importBtn.className = 'ui-btn os-picker-import';
+    importBtn.innerHTML = `<span class="btn-icon">${iconSvg('download')}</span><span class="btn-text">${tr('Import from computer…')}</span>`;
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'ui-btn';
+    cancelBtn.textContent = tr('Cancel');
+    const okBtn = document.createElement('button');
+    okBtn.type = 'button';
+    okBtn.className = 'ui-btn primary';
+    okBtn.textContent = tr('Open');
+    foot.append(hint, importBtn, cancelBtn, okBtn);
+
+    card.append(head, body, foot);
+    mask.append(card);
+
+    const places: Array<[string, string, string]> = [
+      ['home', tr('Home'), '/home/user'],
+      ['monitor', tr('Desktop'), '/home/user/Desktop'],
+      ['file-text', tr('Documents'), '/home/user/Documents'],
+      ['download', tr('Downloads'), '/home/user/Downloads'],
+      ['image', tr('Pictures'), '/home/user/Pictures'],
+    ];
+    for (const [icon, label, p] of places) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'os-picker-place';
+      b.dataset.path = p;
+      b.innerHTML = `<span class="os-picker-place-ico">${iconSvg(icon)}</span><span class="os-picker-place-name"></span>`;
+      (b.lastElementChild as HTMLElement).textContent = label;
+      b.addEventListener('click', () => {
+        if (!vfs.exists(p)) return;
+        cwd = p;
+        selected = '';
+        render();
+      });
+      side.append(b);
+    }
+
+    const render = () => {
+      crumb.textContent = cwd;
+      for (const b of Array.from(side.querySelectorAll<HTMLElement>('.os-picker-place'))) {
+        b.classList.toggle('on', b.dataset.path === cwd);
+      }
+      okBtn.disabled = selected === '';
+      list.innerHTML = '';
+
+      let nodes: any[] = [];
+      try {
+        nodes = vfs.list(cwd);
+      } catch {
+        nodes = [];
+      }
+      const dirs = nodes.filter((n) => n.type === 'dir');
+      const imgs = nodes.filter((n) => n.type === 'file' && IMAGE_RE.test(n.name));
+
+      const row = (opts: { icon: string; name: string; sub?: string; path?: string; thumb?: string }) => {
+        const el = document.createElement('button');
+        el.type = 'button';
+        el.className = 'os-picker-row';
+        if (opts.path) el.dataset.path = opts.path;
+        const ico = document.createElement('span');
+        ico.className = 'os-picker-row-ico';
+        if (opts.thumb) ico.style.backgroundImage = `url("${opts.thumb}")`;
+        else ico.innerHTML = iconSvg(opts.icon);
+        const nm = document.createElement('span');
+        nm.className = 'os-picker-row-name';
+        nm.textContent = opts.name;
+        el.append(ico, nm);
+        if (opts.sub) {
+          const sub = document.createElement('span');
+          sub.className = 'os-picker-row-sub';
+          sub.textContent = opts.sub;
+          el.append(sub);
+        }
+        return el;
+      };
+
+      if (cwd !== '/') {
+        const up = row({ icon: 'arrow-up', name: '..', path: dirname(cwd) });
+        up.addEventListener('click', () => {
+          cwd = dirname(cwd);
+          selected = '';
+          render();
+        });
+        list.append(up);
+      }
+
+      for (const d of dirs) {
+        const el = row({ icon: 'folder', name: d.name, path: d.path });
+        el.addEventListener('click', () => {
+          cwd = d.path;
+          selected = '';
+          render();
+        });
+        list.append(el);
+      }
+
+      for (const f of imgs) {
+        const el = row({ icon: 'image', name: f.name, path: f.path, thumb: this.imageDataUrl(f.path) });
+        el.classList.toggle('sel', selected === f.path);
+        el.addEventListener('click', () => {
+          for (const n of Array.from(list.querySelectorAll('.os-picker-row'))) n.classList.remove('sel');
+          el.classList.add('sel');
+          selected = f.path;
+          okBtn.disabled = false;
+        });
+        el.addEventListener('dblclick', () => finish(f.path));
+        list.append(el);
+      }
+
+      if (dirs.length === 0 && imgs.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'os-picker-empty';
+        empty.textContent = tr('No images in this folder');
+        list.append(empty);
+      }
+    };
+
+    const close = () => {
+      mask.remove();
+      document.removeEventListener('keydown', onKey);
+    };
+    const finish = (p: string) => {
+      close();
+      onPick(p ? this.imageDataUrl(p) : '');
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+        onPick('');
+      } else if (e.key === 'Enter' && selected) {
+        e.preventDefault();
+        finish(selected);
+      }
+    };
+
+    closeBtn.addEventListener('click', () => {
+      close();
+      onPick('');
+    });
+    cancelBtn.addEventListener('click', () => {
+      close();
+      onPick('');
+    });
+    okBtn.addEventListener('click', () => {
+      if (selected) finish(selected);
+    });
+    mask.addEventListener('mousedown', (e) => {
+      if (e.target === mask) {
+        close();
+        onPick('');
+      }
+    });
+
+    // Explicit import path: a fresh file system has no pictures yet, so the
+    // picker can pull one in from the host without becoming the host dialog.
+    importBtn.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.style.display = 'none';
+      const done = () => input.remove();
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (!file) {
+          done();
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const data = String(reader.result ?? '');
+          if (!/^data:image\//i.test(data)) {
+            done();
+            return;
+          }
+          const ext = extname(file.name) || 'png';
+          const stem = basename(file.name).replace(/\.[^.]+$/, '') || 'image';
+          let target = `/home/user/Pictures/${stem}.${ext}`;
+          let i = 2;
+          while (vfs.exists(target)) target = `/home/user/Pictures/${stem} (${i++}).${ext}`;
+          vfs.write(target, data);
+          done();
+          cwd = '/home/user/Pictures';
+          selected = target;
+          render();
+        };
+        reader.onerror = done;
+        reader.readAsDataURL(file);
+      });
+      document.body.appendChild(input);
+      input.click();
+    });
+
+    document.body.append(mask);
+    document.addEventListener('keydown', onKey);
+    render();
   }
 }

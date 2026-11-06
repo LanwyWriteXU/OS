@@ -28,6 +28,8 @@ import clockOml from './clock/clock.oml?raw';
 import clockOsl from './clock/clock.osl?raw';
 import previewOml from './preview/preview.oml?raw';
 import previewOsl from './preview/preview.osl?raw';
+import viewerOml from './viewer/viewer.oml?raw';
+import viewerOsl from './viewer/viewer.osl?raw';
 import logsOml from './logs/logs.oml?raw';
 import logsOsl from './logs/logs.osl?raw';
 import runOml from './run/run.oml?raw';
@@ -55,6 +57,7 @@ export const APPS: AppDef[] = [
   { id: 'calendar', name: 'Calendar', icon: 'app-calendar', width: 660, height: 580, oml: calendarOml, osl: calendarOsl },
   { id: 'clock', name: 'Clock', icon: 'app-clock', width: 760, height: 500, oml: clockOml, osl: clockOsl },
   { id: 'preview', name: 'Preview', icon: 'app-preview', width: 900, height: 620, oml: previewOml, osl: previewOsl, hidden: true },
+  { id: 'viewer', name: 'Image Viewer', icon: 'app-image', width: 940, height: 640, oml: viewerOml, osl: viewerOsl },
   { id: 'monitor', name: 'Monitor', icon: 'app-monitor', width: 760, height: 540, oml: monitorOml, osl: monitorOsl },
   { id: 'logs', name: 'Logs', icon: 'app-logs', width: 880, height: 560, oml: logsOml, osl: logsOsl },
   { id: 'settings', name: 'Settings', icon: 'app-settings', width: 820, height: 600, oml: settingsOml, osl: settingsOsl },

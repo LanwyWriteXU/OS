@@ -321,5 +321,20 @@
   "Discard unsaved changes?": "放弃未保存的修改？",
   "Open file": "打开文件",
   "Choose a file to open": "选择要打开的文件",
-  "New Note": "新建便签"
+  "New Note": "新建便签",
+  "Image Viewer": "图片查看器",
+  "Choose an image": "选择图片",
+  "Choose image…": "选择图片…",
+  "Import from computer…": "从电脑导入…",
+  "Fit to window": "适应窗口",
+  "Zoom in": "放大",
+  "Zoom out": "缩小",
+  "Rotate": "旋转",
+  "Previous image": "上一张",
+  "Next image": "下一张",
+  "No image selected": "未选择图片",
+  "This file is not an image": "该文件不是图片",
+  "No images in this folder": "此文件夹中没有图片",
+  "Browse…": "浏览…",
+  "Copied": "已复制"
 }

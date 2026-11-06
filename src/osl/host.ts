@@ -51,7 +51,10 @@ export interface UiBridge {
   prompt(title: string, value: string, onOk: any): void;
   toast(message: string, icon?: string): void;
   menu(items: any[], onPick: any, x?: number, y?: number, keep?: boolean): void;
-  /** Opens a native image picker; `onPick` receives a data URL or ''. */
+  /**
+   * Opens the OS image picker (the desktop's own file browser, not the browser
+   * file dialog); `onPick` receives a data URL or ''.
+   */
   chooseImage(onPick: (dataUrl: string) => void): void;
 }
 

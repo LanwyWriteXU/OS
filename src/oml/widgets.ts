@@ -98,6 +98,14 @@ export function createWidget(tag: string, attrs: Record<string, string>, ui: UiI
       el.style.flex = 'none';
       return { el, kind: 'icon', noChildren: true };
     }
+    case 'Image': {
+      const el = document.createElement('img');
+      el.className = 'ui-image';
+      el.draggable = false;
+      el.alt = attrs.alt ?? '';
+      el.decoding = 'async';
+      return { el, kind: 'image', noChildren: true };
+    }
     case 'Input': {
       const el = document.createElement('input');
       el.className = 'ui-input';

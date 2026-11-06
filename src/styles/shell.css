@@ -12,7 +12,9 @@
   pointer-events: none;
 }
 .desk-icon { pointer-events: auto; }
-.desk-icon {
+/* Two classes deep so the generic .ui-btn chrome can never paint a plate
+   behind the icon: the desktop icon is flat until hovered or selected. */
+.desk-icons .desk-icon {
   position: absolute;
   left: 14px;
   top: 18px;
@@ -25,14 +27,26 @@
   padding: 8px 4px 6px;
   border-radius: 8px;
   border: 1px solid transparent;
-  background: transparent;
+  background: none;
+  box-shadow: none;
   color: #fff;
   cursor: default;
   transition: background 0.13s, border-color 0.13s;
 }
-.desk-icon:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.14); }
-.desk-icon.sel { background: rgba(90, 169, 255, 0.28); border-color: rgba(90, 169, 255, 0.5); }
+.desk-icons .desk-icon:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.14); }
+.desk-icons .desk-icon.sel { background: rgba(90, 169, 255, 0.28); border-color: rgba(90, 169, 255, 0.5); }
 .desk-icon.dragging { opacity: 0.4; }
+
+/* rubber-band selection rectangle */
+.desk-marquee {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-radius: 2px;
+}
+
 .desk-icon img, .desk-icon svg { width: 100%; height: 100%; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35)); }
 .desk-icon span {
   font-size: 11.5px;
@@ -631,8 +645,8 @@ body[data-taskbar="top"] .tray-panel { bottom: auto; top: 56px; }
 /* desktop icon labels need to stay readable on pale wallpapers */
 body[data-theme="light"] .desk-icon { color: #16202e; }
 body[data-theme="light"] .desk-icon span { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.85); }
-body[data-theme="light"] .desk-icon:hover { background: rgba(255, 255, 255, 0.55); border-color: rgba(15, 23, 42, 0.12); }
-body[data-theme="light"] .desk-icon.sel { background: rgba(90, 169, 255, 0.22); border-color: rgba(90, 169, 255, 0.45); }
+body[data-theme="light"] .desk-icons .desk-icon:hover { background: rgba(255, 255, 255, 0.55); border-color: rgba(15, 23, 42, 0.12); }
+body[data-theme="light"] .desk-icons .desk-icon.sel { background: rgba(90, 169, 255, 0.22); border-color: rgba(90, 169, 255, 0.45); }
 
 /* the mac launcher stays centred, the Windows menu hugs the start button */
 .start-menu.mac { left: calc(50% - 332px); transform: none; }

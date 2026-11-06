@@ -30,12 +30,26 @@ let activeMenu = ""
 let menuX = 40
 let activeApp = "Finder"
 let deskSel = ""
+let deskSelList = []
+let mqOn = False
+let mqOX = 0
+let mqOY = 0
+let mqX0 = 0
+let mqY0 = 0
+let mqX = 0
+let mqY = 0
+let mqW = 0
+let mqH = 0
+let ctxX = 0
+let ctxY = 0
 let menuTarget = ""
+let menuIconApp = ""
 let places = []
 let showHidden = False
 let layoutFile = "/home/user/.config/desktop-layout.json"
 let layout = {}
 let dragPath = ""
+let dragGroup = []
 let dragMoved = False
 let dragDX = 0
 let dragDY = 0
@@ -55,7 +69,6 @@ let menuWin = 0
 let hoverApp = ""
 let previewX = 12
 let previewHeld = False
-let previewPending = False
 let previewToken = 0
 let pendingToken = 0
 
@@ -104,6 +117,10 @@ fn onRefresh():
     muted = s.get("muted")
     apps = sys.apps()
     running = sys.windows()
+    # A fly-out that lost its windows (or dropped to a single one) must close.
+    if hoverApp != "" and len(windowsOf(hoverApp)) < 2:
+        hoverApp = ""
+        previewHeld = False
     notifs = sys.notifications()
     recent = sys.recent()
     battery = sys.battery()
@@ -220,8 +237,18 @@ fn dragStart(it, e):
     if e.button != 0:
         return
     let p = it.get("path")
+    # Pressing a member of a multi-selection keeps the group and drags it as a
+    # whole; pressing anything else starts a fresh single selection.
+    if not deskSelected(p) or len(deskSelList) < 2:
+        deskSel = p
+        deskSelList = [p]
     dragPath = p
-    deskSel = p
+    dragGroup = []
+    for s in deskSelList:
+        let v = layout.get(s)
+        if v != None:
+            dragGroup.append({"path": s, "x": v.get("x"), "y": v.get("y")})
+    mqOn = False
     dragMoved = False
     dragDX = e.x - e.rect.left
     dragDY = e.y - e.rect.top
@@ -233,6 +260,9 @@ fn snapTo(v, cell, pad):
     return pad + math.round((v - pad) / cell) * cell
 
 fn dragMove(e):
+    if mqOn:
+        marqueeMove(e)
+        return
     if dragPath == "":
         return
     let vp = sys.viewport()
@@ -252,15 +282,41 @@ fn dragMove(e):
         x = snapTo(x, iconSize + 46, 14)
         y = snapTo(y, iconSize + 54, 18)
     dragMoved = True
-    layout.set(dragPath, {"x": x, "y": y})
+    # Apply the anchor's delta to every icon in the drag group.
+    let base = None
+    for g in dragGroup:
+        if g.get("path") == dragPath:
+            base = g
+    if base == None:
+        layout.set(dragPath, {"x": x, "y": y})
+    else:
+        let dx = x - base.get("x")
+        let dy = y - base.get("y")
+        for g in dragGroup:
+            let gx = g.get("x") + dx
+            let gy = g.get("y") + dy
+            if gx < 2:
+                gx = 2
+            if gy < 2:
+                gy = 2
+            if gx > maxX:
+                gx = maxX
+            if gy > maxY:
+                gy = maxY
+            layout.set(g.get("path"), {"x": gx, "y": gy})
     refresh()
 
 fn dragEnd():
+    if mqOn:
+        mqOn = False
+        refresh()
+        return
     if dragPath == "":
         return
     let moved = dragMoved
     dragPath = ""
     dragMoved = False
+    dragGroup = []
     if moved:
         fs.writeJson(layoutFile, layout)
         refresh()
@@ -362,13 +418,121 @@ fn goPlace(p):
     sys.open("files", {"path": p})
     refresh()
 
-fn selectDesktop(path):
-    deskSel = path
+# ------------------------------------------------------- desktop selection
+
+fn deskSelected(p):
+    if p == deskSel:
+        return True
+    for s in deskSelList:
+        if s == p:
+            return True
+    return False
+
+fn clearDeskSel():
+    deskSel = ""
+    deskSelList = []
+
+fn selectDesktop(path, e):
+    if e != None and (e.ctrl or e.meta):
+        if deskSelected(path):
+            let next = []
+            for s in deskSelList:
+                if s != path:
+                    next.append(s)
+            if path == deskSel:
+                deskSel = next[len(next) - 1] if len(next) > 0 else ""
+            deskSelList = next
+        else:
+            let next = []
+            for s in deskSelList:
+                next.append(s)
+            next.append(path)
+            deskSelList = next
+            deskSel = path
+    else:
+        deskSel = path
+        deskSelList = [path]
+    refresh()
+
+fn onEmptyDesktop(el):
+    if el.closest(".win") != None:
+        return False
+    if el.closest(".start-menu") != None:
+        return False
+    if el.closest(".mb-menu") != None:
+        return False
+    if el.closest(".taskbar") != None:
+        return False
+    if el.closest(".tray-panel") != None:
+        return False
+    if el.closest(".dock-wrap") != None:
+        return False
+    if el.closest(".win-preview") != None:
+        return False
+    return True
+
+# Pressing anywhere that is not the desktop (a window, the taskbar, a panel)
+# drops the selection, exactly like Explorer does.
+fn deskDown(e):
+    if e.button != 0:
+        return
+    let el = e.target
+    if el.closest(".desk-icon") != None:
+        return
+    if not onEmptyDesktop(el):
+        if deskSel != "" or len(deskSelList) > 0:
+            clearDeskSel()
+            refresh()
+        return
+    # Icon coordinates are relative to the work area, so the rubber band has to
+    # be measured from there too (the shell root includes the menu bar).
+    let area = el.closest(".workarea")
+    if area == None:
+        return
+    let box = area.getBoundingClientRect()
+    mqOX = box.left
+    mqOY = box.top
+    mqOn = True
+    mqX0 = e.x - mqOX
+    mqY0 = e.y - mqOY
+    mqX = mqX0
+    mqY = mqY0
+    mqW = 0
+    mqH = 0
+    clearDeskSel()
+    refresh()
+
+fn marqueeMove(e):
+    let x1 = e.x - mqOX
+    let y1 = e.y - mqOY
+    let left = mqX0
+    if x1 < left:
+        left = x1
+    let top = mqY0
+    if y1 < top:
+        top = y1
+    mqX = left
+    mqY = top
+    mqW = math.abs(x1 - mqX0)
+    mqH = math.abs(y1 - mqY0)
+    let sel = []
+    if mqW > 2 or mqH > 2:
+        let right = left + mqW
+        let bottom = top + mqH
+        for it in deskIcons:
+            let p = it.get("path")
+            let ix = posX(p)
+            let iy = posY(p)
+            if ix + iconSize + 44 > left and ix < right and iy + iconSize + 50 > top and iy < bottom:
+                sel.append(p)
+    deskSel = ""
+    deskSelList = sel
     refresh()
 
 fn openItem(it):
     let appId = it.get("app")
     deskSel = it.get("path")
+    deskSelList = [it.get("path")]
     if appId != "":
         launch(appId)
     else:
@@ -385,6 +549,7 @@ fn hideStart():
     refresh()
 
 fn toggleStart():
+    clearDeskSel()
     if startOpen:
         startClosing = True
         refresh()
@@ -481,6 +646,7 @@ fn taskItems():
 
 fn taskItemClick(item):
     trayOpen = False
+    clearDeskSel()
     let id = item.get("appId")
     let wins = windowsOf(id)
     if len(wins) == 0:
@@ -540,13 +706,14 @@ fn previewShow(item, e):
     # Invalidate any pending hide so moving between adjacent buttons does not
     # briefly show then dismiss the preview.
     previewToken += 1
-    if len(windowsOf(id)) == 0:
-        # Hovering a pinned-but-idle icon offers to launch instead.
-        if hoverApp != id:
-            hoverApp = id
-            previewPending = False
+    # The fly-out is a window switcher, so it only belongs to apps that really
+    # have several windows open. A single window (or a pinned-but-idle icon)
+    # must not open it — the plain tooltip is enough there.
+    if len(windowsOf(id)) < 2:
+        if hoverApp != "":
+            hoverApp = ""
             previewHeld = False
-            previewX = 12
+            pendingToken = previewToken
             refresh()
         return
     let vp = sys.viewport()
@@ -731,6 +898,7 @@ fn dockItems():
 
 fn dockClick(d):
     trayOpen = False
+    clearDeskSel()
     if d.get("kind") == "min":
         let wid = d.get("winId")
         if wid != 0:
@@ -787,8 +955,12 @@ fn taskItemMenu(item, e):
     if menuWin != 0:
         items.append({"label": t("Close window"), "icon": "x", "id": "close"})
     items.append({"label": t("New window"), "icon": "plus", "id": "new"})
+    items.append({"sep": True})
     if menuApp in pinned:
         items.append({"label": t("Unpin from taskbar"), "icon": "star", "id": "unpin"})
+    else:
+        items.append({"label": t("Pin to taskbar"), "icon": "star", "id": "pin"})
+    items.append({"label": t("Show in Files"), "icon": "folder", "id": "reveal"})
     ui.menu(items, taskItemPick, e.x, e.y)
 
 fn taskItemPick(it):
@@ -797,8 +969,12 @@ fn taskItemPick(it):
         sys.closeWindow(menuWin)
     elif id == "new":
         launch(menuApp)
+    elif id == "pin":
+        pinApp(menuApp)
     elif id == "unpin":
         unpinApp(menuApp)
+    elif id == "reveal":
+        sys.open("files", {"path": "/usr/share/applications"})
     refresh()
 
 fn dockMenu(d, e):
@@ -959,6 +1135,9 @@ fn desktopMenu(e):
         return
     if e.target.closest(".desk-icon") != None:
         return
+    if deskSel != "" or len(deskSelList) > 0:
+        clearDeskSel()
+        refresh()
     ui.menu([
         {"label": t("New folder"), "icon": "folder-plus", "id": "newfolder"},
         {"label": t("New file"), "icon": "file-plus", "id": "newfile"},
@@ -1020,19 +1199,75 @@ fn shortcutPick(it):
     ui.toast(t("Created ") + a.name, "app-about")
     refresh()
 
+# The desktop context menu mirrors the one in Files, so a file behaves the same
+# wherever it is right-clicked.
+fn deskOpenWith():
+    let out = []
+    if menuTarget == "" or fs.isDir(menuTarget):
+        return out
+    let ext = paths.extname(menuTarget)
+    if isImageFile(menuTarget):
+        out.append({"label": t("Image Viewer"), "icon": "app-image", "id": "viewer"})
+    out.append({"label": t("Notes"), "icon": "app-notes", "id": "notes"})
+    if ext == "osl" or ext == "oml":
+        out.append({"label": t("IDE"), "icon": "app-ide", "id": "ide"})
+    out.append({"label": t("Files"), "icon": "app-files", "id": "files"})
+    return out
+
+fn isImageFile(p):
+    let e = paths.extname(p)
+    return e == "png" or e == "jpg" or e == "jpeg" or e == "gif" or e == "webp" or e == "bmp" or e == "svg" or e == "avif" or e == "ico"
+
 fn deskIconMenu(it, e):
     e.stop()
     menuTarget = it.get("path")
     deskSel = menuTarget
+    deskSelList = [menuTarget]
+    ctxX = e.x
+    ctxY = e.y
     let items = [
         {"label": t("Open"), "icon": "external", "id": "open"},
-        {"label": t("Open in Files"), "icon": "folder", "id": "reveal"},
         {"sep": True},
         {"label": t("Rename"), "icon": "pen", "id": "rename"},
         {"label": t("Duplicate"), "icon": "copy", "id": "duplicate"},
         {"label": t("Delete"), "icon": "trash", "danger": True, "id": "delete"},
+        {"sep": True},
+        {"label": t("Copy path"), "icon": "link", "id": "copy"},
+        {"label": t("Show in Files"), "icon": "folder", "id": "reveal"},
     ]
+    if len(deskOpenWith()) > 0:
+        items.append({"sep": True})
+        items.append({"label": t("Open with"), "icon": "apps", "id": "openwith", "cascade": True})
+    let appId = it.get("app")
+    menuIconApp = appId
+    if appId != "":
+        items.append({"sep": True})
+        if style == "mac":
+            if appId in dockPinned:
+                items.append({"label": t("Remove from Dock"), "icon": "trash", "id": "undock"})
+            else:
+                items.append({"label": t("Keep in Dock"), "icon": "apps", "id": "dock"})
+        else:
+            if appId in pinned:
+                items.append({"label": t("Unpin from taskbar"), "icon": "star", "id": "unpin"})
+            else:
+                items.append({"label": t("Pin to taskbar"), "icon": "star", "id": "pin"})
     ui.menu(items, deskIconPick, e.x, e.y)
+    refresh()
+
+fn deskOpenWithPick(it):
+    let id = it.get("id")
+    if menuTarget == "":
+        return
+    if id == "viewer":
+        sys.open("viewer", {"path": menuTarget})
+    elif id == "notes":
+        sys.open("notes", {"path": menuTarget})
+    elif id == "ide":
+        sys.open("ide", {"path": menuTarget})
+    elif id == "files":
+        sys.open("files", {"path": paths.dirname(menuTarget)})
+    refresh()
 
 fn deskIconPick(it):
     let id = it.get("id")
@@ -1041,7 +1276,20 @@ fn deskIconPick(it):
     if id == "open":
         sys.openPath(menuTarget)
     elif id == "reveal":
-        sys.open("files", {"path": "/home/user/Desktop"})
+        sys.open("files", {"path": paths.dirname(menuTarget)})
+    elif id == "copy":
+        clip.write(menuTarget)
+        ui.toast(t("Copied"), "copy")
+    elif id == "openwith":
+        ui.menu(deskOpenWith(), deskOpenWithPick, ctxX + 190, ctxY + 96, True)
+    elif id == "pin":
+        pinApp(menuIconApp)
+    elif id == "unpin":
+        unpinApp(menuIconApp)
+    elif id == "dock":
+        dockApp(menuIconApp)
+    elif id == "undock":
+        undockApp(menuIconApp)
     elif id == "rename":
         ui.prompt(t("Rename"), paths.basename(menuTarget), renameDeskItem)
     elif id == "duplicate":
@@ -1103,6 +1351,7 @@ fn createFile(name):
 # ---------------------------------------------------------------- tray
 
 fn toggleTray():
+    clearDeskSel()
     trayOpen = not trayOpen
     startOpen = False
     activeMenu = ""

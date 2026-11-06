@@ -241,10 +241,15 @@ fn doRename(name):
     load()
     refresh()
 
+fn isImageExt(ext):
+    return ext == "png" or ext == "jpg" or ext == "jpeg" or ext == "gif" or ext == "webp" or ext == "bmp" or ext == "svg" or ext == "avif" or ext == "ico"
+
 fn openWithApps(f):
     let out = []
     let ext = f.ext
     if f.type == "file":
+        if isImageExt(ext):
+            out.append({"label": t("Image Viewer"), "icon": "app-image", "id": "viewer"})
         out.append({"label": "Notes", "icon": "app-notes", "id": "notes"})
         if ext == "osl" or ext == "oml":
             out.append({"label": "IDE", "icon": "app-ide", "id": "ide"})
@@ -286,6 +291,8 @@ fn openWithPick(it):
         sys.open("notes", {"path": sel})
     elif id == "ide":
         sys.open("ide", {"path": sel})
+    elif id == "viewer":
+        sys.open("viewer", {"path": sel})
     refresh()
 
 fn fileMenuPick(it):
