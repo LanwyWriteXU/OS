@@ -57,7 +57,7 @@ fn sizeText(f):
         return ""
     return fs.sizeText(f.size)
 fn dateText(f):
-    return time.format(f.mtime, "MMM d, HH:mm")
+    return time.intl(f.mtime, "dateTimeShort")
 
 fn iconFor(f):
     if f.type == "dir":
@@ -78,7 +78,7 @@ fn iconFor(f):
     return "file"
 
 fn setTitle():
-    win.setTitle(t("Files") + " — " + paths.relative(cwd))
+    win.setTitle(t("File Manager") + " — " + paths.relative(cwd))
 
 fn go(p):
     let target = fs.normalize(p)

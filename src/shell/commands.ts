@@ -139,7 +139,7 @@ def('help', 'List available commands', 'help [command]', (ctx) => {
   }
   const names = Object.keys(commands).sort();
   const width = 78;
-  let out = `${C.b}OS Shell (osh 1.0)${C.r} — ${names.length} built-in commands\n\n`;
+  let out = `${C.b}OS Shell (osh 1.1)${C.r} — ${names.length} built-in commands\n\n`;
   let line = '';
   for (const n of names) {
     const cell = n.padEnd(13);
@@ -592,12 +592,12 @@ def('whoami', 'Print the current user', 'whoami', (ctx) => ({ out: ctx.term.env.
 def('hostname', 'Print the host name', 'hostname', () => ({ out: 'origin' }));
 def('uname', 'Print system information', 'uname [-a]', (ctx) => {
   const { flags } = parseArgs(ctx.argv);
-  if (flags.has('a')) return { out: 'OS origin 1.0.0-osk #1 SMP PREEMPT origin x86_64 oml' };
+  if (flags.has('a')) return { out: 'OS origin 1.1.0-osk #1 SMP PREEMPT origin x86_64 oml' };
   return { out: 'OS' };
 });
-def('ver', 'Print the OS version (Windows)', 'ver', () => ({ out: 'OS [Version 1.0.2601]' }));
+def('ver', 'Print the OS version (Windows)', 'ver', () => ({ out: 'OS [Version 1.1.2601]' }));
 def('sw_vers', 'Print the OS version (macOS)', 'sw_vers', () => ({
-  out: ['ProductName:\t\tOS', 'ProductVersion:\t1.0', 'BuildVersion:\t\tOrigin'].join('\n'),
+  out: ['ProductName:\t\tOS', 'ProductVersion:\t1.1', 'BuildVersion:\t\tOrigin'].join('\n'),
 }));
 
 def('uptime', 'Show system uptime', 'uptime', (ctx) => {
@@ -645,7 +645,7 @@ def('man', 'Show the manual for a command', 'man <command>', (ctx) => {
   const d = name ? commands[name] : null;
   if (!d) return { err: `No manual entry for ${name ?? ''}`, code: 1 };
   return {
-    out: `${C.b}${name.toUpperCase()}${C.r}(1)\n\n${C.b}NAME${C.r}\n    ${name} — ${d.desc}\n\n${C.b}SYNOPSIS${C.r}\n    ${d.usage}\n\n${C.b}DESCRIPTION${C.r}\n    Part of the OS shell (osh 1.0). Runs in the origin virtual machine.\n`,
+    out: `${C.b}${name.toUpperCase()}${C.r}(1)\n\n${C.b}NAME${C.r}\n    ${name} — ${d.desc}\n\n${C.b}SYNOPSIS${C.r}\n    ${d.usage}\n\n${C.b}DESCRIPTION${C.r}\n    Part of the OS shell (osh 1.1). Runs in the origin virtual machine.\n`,
   };
 });
 
@@ -869,12 +869,12 @@ def('fastfetch', 'Display system information', 'fastfetch [--logo none]', (ctx) 
   const info = [
     `${C.bgreen}${s.get('user')}@${C.bgreen}origin${C.r}`,
     `${C.d}──────────────────────${C.r}`,
-    `${C.bcyan}OS${C.r}         OS 1.0 "Origin" x86_64`,
+    `${C.bcyan}OS${C.r}         OS 1.1 "Origin" x86_64`,
     `${C.bcyan}Host${C.r}       Origin Virtual Machine`,
-    `${C.bcyan}Kernel${C.r}     osk 1.0.0 (oml-runtime)`,
+    `${C.bcyan}Kernel${C.r}     osk 1.1.0 (oml-runtime)`,
     `${C.bcyan}Uptime${C.r}     ${h > 0 ? `${h} hour${h > 1 ? 's' : ''}, ` : ''}${m} min${m === 1 ? '' : 's'}`,
-    `${C.bcyan}Shell${C.r}      osh 1.0`,
-    `${C.bcyan}DE${C.r}         OML Shell 1.0`,
+    `${C.bcyan}Shell${C.r}      osh 1.1`,
+    `${C.bcyan}DE${C.r}         OML Shell 1.1`,
     `${C.bcyan}WM${C.r}         OWM (${style} chrome)`,
     `${C.bcyan}Terminal${C.r}   oterm`,
     `${C.bcyan}CPU${C.r}        ${cores} × Virtual Core @ 3.2 GHz`,
@@ -882,7 +882,7 @@ def('fastfetch', 'Display system information', 'fastfetch [--logo none]', (ctx) 
     `${C.bcyan}Disk${C.r}       ${files} files · ${size}`,
     `${C.bcyan}Resolution${C.r} ${res}`,
     `${C.bcyan}Theme${C.r}      ${theme} · ${style}`,
-    `${C.bcyan}Locale${C.r}     en_US.UTF-8`,
+    `${C.bcyan}Locale${C.r}     ${ctx.term.env.get('LANG') ?? 'en_US.UTF-8'}`,
   ];
   let out = '\n';
   const rows = Math.max(logo.length, info.length);
@@ -890,7 +890,7 @@ def('fastfetch', 'Display system information', 'fastfetch [--logo none]', (ctx) 
     const l = logo[i] ?? ' '.repeat(ART_W);
     out += `${l}  ${info[i] ?? ''}\n`;
   }
-  out += `\n${C.d}   OSL 1.0 · OML 1.0 · IndexedDB VFS${C.r}\n`;
+  out += `\n${C.d}   OSL 1.1 · OML 1.1 · IndexedDB VFS${C.r}\n`;
   return { out };
 });
 

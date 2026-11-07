@@ -79,7 +79,7 @@ fn tickClock():
         clock = time.format(time.now(), clock24 ? "HH:mm:ss" : "hh:mm:ss A")
     else:
         clock = time.format(time.now(), clock24 ? "HH:mm" : "hh:mm A")
-    dateStr = time.format(time.now(), "ddd, MMM d")
+    dateStr = time.format(time.now(), uiLang == "zh" ? "MM月d日 ddd" : "ddd, MMM d")
     if battery.get("supported"):
         batteryText = str(battery.get("level")) + "%"
         if battery.get("charging"):
@@ -1117,7 +1117,7 @@ fn menuPick(mi):
     elif id == "keys":
         ui.alert(
             "Alt+Tab  — switch windows\nAlt+F4 / Ctrl+W  — close window\nCtrl+Alt+T  — new terminal\nCtrl+Space  — start menu\nCtrl+S  — save in editor",
-            t("Keyboard shortcuts"),
+            t("Keyboard Shortcuts"),
         )
     refresh()
 
@@ -1211,7 +1211,7 @@ fn deskOpenWith():
     out.append({"label": t("Notes"), "icon": "app-notes", "id": "notes"})
     if ext == "osl" or ext == "oml":
         out.append({"label": t("IDE"), "icon": "app-ide", "id": "ide"})
-    out.append({"label": t("Files"), "icon": "app-files", "id": "files"})
+    out.append({"label": t("File Manager"), "icon": "app-files", "id": "files"})
     return out
 
 fn isImageFile(p):

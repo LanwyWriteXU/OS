@@ -1,4 +1,4 @@
-<Window title="Files" icon="app-files">
+<Window title="File Manager" icon="app-files">
   <HBox class="files" onkeydown="onKey(event)">
     <VBox class="files-side">
       <Label class="side-title" text="Quick access"/>

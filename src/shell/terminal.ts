@@ -52,7 +52,7 @@ export class Terminal implements TerminalApi {
     this.env.set('TERM', 'xterm-256color');
     this.env.set('PATH', '/bin:/usr/bin:/usr/local/bin');
     this.env.set('HOSTNAME', 'origin');
-    this.env.set('LANG', 'en_US.UTF-8');
+    this.env.set('LANG', host.settings.get('lang') === 'zh' ? 'zh_CN.UTF-8' : 'en_US.UTF-8');
 
     try {
       this.historyList = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]');

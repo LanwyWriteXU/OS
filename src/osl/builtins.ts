@@ -43,27 +43,35 @@ function toJson(v: any): any {
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+/** Day and month names go through the catalogue, so `time.format` follows the UI language. */
+function nameKey(key: string) {
+  const translated = translate(key);
+  return translated === key ? key : translated;
+}
+
 export function formatTime(ts: number, fmt: string): string {
   const d = new Date(ts);
   const pad = (n: number) => String(n).padStart(2, '0');
   const h24 = d.getHours();
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  const dayName = nameKey(DAYS[d.getDay()]);
+  const monthName = nameKey(MONTHS[d.getMonth()]);
   const map: Record<string, string> = {
     YYYY: String(d.getFullYear()),
     YY: String(d.getFullYear()).slice(2),
-    MMMM: MONTHS[d.getMonth()],
-    MMM: MONTHS[d.getMonth()].slice(0, 3),
+    MMMM: monthName,
+    MMM: monthName.slice(0, 3),
     MM: pad(d.getMonth() + 1),
     DD: pad(d.getDate()),
     dd: pad(d.getDate()),
     d: String(d.getDate()),
-    dddd: DAYS[d.getDay()],
-    ddd: DAYS[d.getDay()].slice(0, 3),
+    dddd: dayName,
+    ddd: dayName.slice(0, 3),
     HH: pad(h24),
     hh: pad(h12),
     mm: pad(d.getMinutes()),
     ss: pad(d.getSeconds()),
-    A: h24 < 12 ? 'AM' : 'PM',
+    A: nameKey(h24 < 12 ? 'AM' : 'PM'),
   };
   return fmt.replace(/YYYY|YY|MMMM|MMM|MM|DD|dddd|ddd|dd|d|HH|hh|mm|ss|A/g, (t) => map[t] ?? t);
 }
@@ -475,6 +483,7 @@ export function createBuiltins(interp: Interpreter, host: Host): Record<string, 
         weekday: { weekday: 'long' },
         weekdayShort: { weekday: 'short' },
         date: { year: 'numeric', month: 'short', day: 'numeric' },
+        dateTimeShort: { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' },
         time: { hour: '2-digit', minute: '2-digit' },
         full: { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' },
       };

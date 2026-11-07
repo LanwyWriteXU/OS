@@ -53,7 +53,7 @@ export interface AppDef {
 }
 
 export const APPS: AppDef[] = [
-  { id: 'files', name: 'Files', icon: 'app-files', width: 900, height: 560, minWidth: 620, minHeight: 400, oml: filesOml, osl: filesOsl },
+  { id: 'files', name: 'File Manager', icon: 'app-files', width: 900, height: 560, minWidth: 620, minHeight: 400, oml: filesOml, osl: filesOsl },
   { id: 'terminal', name: 'Terminal', icon: 'app-terminal', width: 800, height: 500, minWidth: 460, minHeight: 280, oml: terminalOml, osl: terminalOsl },
   { id: 'editor', name: 'Editor', icon: 'app-editor', width: 820, height: 600, minWidth: 520, minHeight: 360, oml: editorOml, osl: editorOsl, hidden: true },
   { id: 'ide', name: 'IDE', icon: 'app-ide', width: 1140, height: 700, minWidth: 780, minHeight: 520, oml: ideOml, osl: ideOsl },

@@ -25,7 +25,7 @@
     </VBox>
     <Divider/>
     <HBox gap="8">
-      <Button icon="book" text="Welcome guide" variant="primary" onclick="openGuide()"/>
+      <Button icon="book" text="Welcome Guide" variant="primary" onclick="openGuide()"/>
       <Button icon="terminal" text="Terminal" onclick="openTerm()"/>
       <Button icon="refresh" text="Check updates" onclick="checkUpdates()"/>
     </HBox>

@@ -828,9 +828,11 @@ export class Interpreter {
       return null;
     }
     if (obj instanceof Map) {
+      // Stored keys win over method names: `fs.list()` entries carry a `size`
+      // field, and that must not resolve to the Map's `size()` helper.
+      if (obj.has(name)) return obj.get(name);
       const method = this.mapMethod(obj, name);
       if (method) return method;
-      if (obj.has(name)) return obj.get(name);
       return null;
     }
     if (Array.isArray(obj)) {
