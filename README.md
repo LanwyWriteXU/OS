@@ -8,15 +8,15 @@
 | **OSL** | Origin Software Language | 缩进敏感的脚本语言，所有交互逻辑 | Python |
 | **OML** | Origin Markup Language | XML 方言，所有界面结构与布局 | XAML |
 
-界面上没有一个写死的按钮 —— 连任务栏、开始菜单、macOS 菜单栏和 Dock 都是
-`shell.oml` 里的标签。想改桌面长什么样，就去改那几千行 OSL/OML，不用碰 TypeScript。
+界面上没有一个写死的按钮 —— 任务栏、开始菜单、托盘、通知都是 `shell.oml` 里的标签。
+想改桌面长什么样，就去改那几千行 OSL/OML，不用碰 TypeScript。
 
 ```
-宿主 TypeScript   ≈ 9.5k 行   （词法 / 语法 / 解释器 / 渲染器 / VFS / WM）
-OSL               ≈ 4.3k 行   （系统外壳 + 17 个应用的全部逻辑）
-OML               ≈ 1.4k 行   （全部界面）
-CSS               ≈ 2.1k 行   （纯渲染层，不算 OS 源码）
-图标               82 个 SVG   （构建期内联进 bundle）
+宿主 TypeScript   ≈ 9.5k 行   词法 / 语法 / 解释器 / 渲染器 / VFS / 窗口管理器
+OSL               ≈ 4.3k 行   系统外壳 + 17 个应用的全部逻辑
+OML               ≈ 1.4k 行   全部界面
+CSS               ≈ 2.1k 行   纯渲染层，不算 OS 源码
+图标               82 个 SVG   构建期内联进 bundle
 ```
 
 ---
@@ -52,7 +52,7 @@ pnpm preview        # http://127.0.0.1:4173
 
 ## 截图
 
-| 桌面（Windows 风格） | 开始菜单 |
+| 桌面 | 开始菜单 |
 | --- | --- |
 | ![桌面](docs/screenshots/desktop.jpg) | ![开始菜单](docs/screenshots/start-menu.jpg) |
 
@@ -60,13 +60,14 @@ pnpm preview        # http://127.0.0.1:4173
 | --- | --- |
 | ![终端](docs/screenshots/terminal.jpg) | ![文件管理器](docs/screenshots/files.jpg) |
 
-| macOS 风格（菜单栏 + Dock） | 浅色主题 |
+| IDE（语法高亮 + 运行输出） | 浅色主题 |
 | --- | --- |
-| ![macOS](docs/screenshots/macos.jpg) | ![浅色](docs/screenshots/light.jpg) |
+| ![IDE](docs/screenshots/ide.jpg) | ![浅色主题](docs/screenshots/light.jpg) |
 
-| IDE（语法高亮 + 运行输出） | 应用图标网格 |
-| --- | --- |
-| ![IDE](docs/screenshots/ide.jpg) | ![图标](docs/screenshots/icons.png) |
+应用图标共用一套网格：48×48 画布、12 px 圆角、统一深色底、2.2 px 白色线性图形，
+只用 20% 左右的应用色偏做区分。
+
+![应用图标](docs/screenshots/icons.png)
 
 ![编辑器的文件选择器](docs/screenshots/file-picker.jpg)
 
@@ -76,24 +77,22 @@ pnpm preview        # http://127.0.0.1:4173
 
 ### 桌面外壳
 
-- **两套外观，一份 OML**：`body[data-style="win"]` 是任务栏 + 开始菜单，
-  `data-style="mac"` 换成菜单栏 + Dock + 交通灯按钮，切换只靠 `if`。
 - **窗口管理**：拖拽、八向缩放、边缘吸附（左右半屏 / 最大化）、最大化与还原、
   最小化、z-order、级联摆放；同一应用可开任意多个窗口。
-- **窗口动画**：最大化/还原 0.2 s 过渡；最小化时缩小飞向任务栏按钮或 Dock 图标。
+- **窗口动画**：最大化/还原 0.2 s 过渡；最小化时窗口缩小飞向任务栏按钮。
 - **最小尺寸**：每个应用声明 `minWidth` / `minHeight`，缩到布局极限会停住；
   尺寸变化会触发重绘（计算器就是靠这个在基础/科学模式间切换）。
-- **任务栏 / Dock**：固定应用可右键添加、拖动排序；同应用多窗口合并为一个按钮
-  并显示数量，点击循环切换，悬停弹出预览列表，预览里也能新建窗口。
+- **任务栏**：固定应用可右键添加、拖动排序；同一应用的多个窗口合并成一个按钮
+  并显示数量，点击循环切换；悬停弹出预览列表，预览里也能直接新建窗口。
 - **窗口切换器**：`Alt + Tab` 按住浏览、松开切到目标，带预览卡片。
 - **桌面即文件系统**：`~/Desktop` 下的文件就是桌面图标，`.desktop` 是快捷方式；
   图标可拖到任意位置，坐标写入 `~/.config/desktop-layout.json`，右键"整理图标"复位；
   网格吸附是个开关，关掉就能随便放。
-- **托盘与系统状态**：电量走 `navigator.getBattery()`，音量是可调的系统音量
-  （影响通知提示音），托盘面板里直接调。
-- **壁纸**：8 套深色壁纸各带浅色版本，也可上传本地图片做自定义壁纸；
-  8 种强调色、3 档桌面图标尺寸、3 档字号。
-- **通知系统**：右下角堆叠、自动消失、可在托盘里重新唤起。
+- **托盘与系统状态**：电量走 `navigator.getBattery()`；音量是可调的系统音量
+  （影响通知提示音），托盘面板里直接调；通知列表也能在托盘里回看。
+- **壁纸与主题**：8 套壁纸各带浅色版本，也可上传本地图片做自定义壁纸；
+  深/浅两套主题、8 种强调色、3 档桌面图标尺寸、3 档字号。
+- **通知系统**：右下角堆叠、自动消失、可在托盘里重新查看。
 - **多语言**：English / 简体中文，词条集中在 `src/i18n`，设置面板一键切换；
   语言包本身也写进 VFS，可以用 `/usr/share/i18n` 里的 JSON 改。
 
@@ -122,7 +121,7 @@ pnpm preview        # http://127.0.0.1:4173
 
 - `osl <file>` 直接解释执行脚本（`run` 是别名），`open <app>` 启动应用。
 
-### 其他
+### 平台能力
 
 - **应用注册表**：`/etc/apps.json` 保存应用列表与元数据（名称、图标、窗口尺寸、
   是否隐藏），每个应用目录里还有 `app.json`。改完调 `sys.reloadApps()` 生效。
@@ -136,6 +135,7 @@ pnpm preview        # http://127.0.0.1:4173
   记录内容哈希。启动时哈希仍匹配（说明没动过）就用新 bundle 覆盖，不匹配就保留原样。
   想恢复出厂版本，删掉对应文件再刷新。
 - **模块化 OSL**：`import "lib/x.osl" as x` / `from "lib/x.osl" import y`。
+- **模板应用**：`/usr/share/apps/hello` 是最小可跑应用（输入框、计数器、日志）。
 
 ---
 
@@ -158,13 +158,10 @@ pnpm preview        # http://127.0.0.1:4173
 | **Language Docs** | OSL / OML 完整参考：左侧章节目录、顶部跨章节搜索、中英双语切换 |
 | **Monitor** | 运行状态面板 |
 | **Logs** | 系统日志 |
-| **Settings** | 主题、外观风格、强调色、壁纸、语言、字体、桌面网格、任务栏位置、通知、音量、存储重置 |
+| **Settings** | 主题、强调色、壁纸、语言、字体、桌面网格、任务栏位置、通知、音量、存储重置 |
 | **Calculator** | 窗口变宽自动切到科学模式 |
 | **About** | 版本与致谢 |
 | **Run** | 快速启动器（隐藏应用） |
-
-**模板应用**：`/usr/share/apps/hello` 是最小可跑应用（输入框、计数器、日志）。
-复制改名 → 在 `/etc/apps.json` 加一条 → `sys.reloadApps()`，就出现在开始菜单里。
 
 ---
 
@@ -293,7 +290,7 @@ XML 方言，标签即组件，属性即参数；`{...}` 里是 OSL 表达式，
 | `Alt + Tab` / `Alt + Shift + Tab` | 窗口切换器（按住浏览，松开切换） |
 | `Alt + F4` / `Ctrl + W` | 关闭当前窗口 |
 | `Alt + F2` | 运行窗口 |
-| `Ctrl + Space` | 开始菜单 / Spotlight |
+| `Ctrl + Space` | 开始菜单 / 快速搜索 |
 | `Ctrl + Alt + T` | 新终端 |
 | `Ctrl + Alt + I` | 打开 IDE |
 | `Ctrl + S` | 编辑器保存 |
