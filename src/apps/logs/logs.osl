@@ -1,0 +1,60 @@
+# logs.osl — the system log viewer. Reads the kernel ring buffer.
+
+let entries = []
+let level = "all"
+let query = ""
+let total = 0
+
+fn reload():
+    entries = reversed(sys.logs(200))
+    total = len(entries)
+
+fn tick():
+    reload()
+    refresh()
+
+every(2500, tick)
+
+fn visible():
+    let out = []
+    let q = query.lower()
+    for e in entries:
+        if level != "all" and e.get("level") != level:
+            continue
+        if q != "" and e.get("message").lower().find(q) < 0:
+            continue
+        out.append(e)
+    return out
+
+fn setLevel(l):
+    level = l
+    refresh()
+
+fn doSearch():
+    refresh()
+
+fn clearAll():
+    sys.clearLogs()
+    reload()
+    ui.toast(t("Logs cleared"), "trash")
+    refresh()
+
+fn lvl(l):
+    if l == "app":
+        return t("App")
+    if l == "error":
+        return t("Error")
+    if l == "notice":
+        return t("Notice")
+    if l == "system":
+        return t("System")
+    return l
+
+fn stamp(ts):
+    return time.format(ts, "HH:mm:ss")
+
+fn refreshList():
+    reload()
+    refresh()
+
+reload()

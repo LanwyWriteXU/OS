@@ -1,0 +1,38 @@
+<Window title="Logs" icon="app-logs">
+  <VBox class="logs">
+    <HBox class="logs-head">
+      <VBox class="logs-title" flex="1">
+        <Title text="System log"/>
+        <Label class="set-desc" text="{t('{0} entries · newest first', total)}"/>
+      </VBox>
+      <Input class="logs-search" bind="query" placeholder="Filter messages" oninput="doSearch()"/>
+      <HBox class="seg">
+        <Button text="All" variant="ghost" class="{level == 'all' ? 'on' : ''}" onclick="setLevel('all')"/>
+        <Button text="App" variant="ghost" class="{level == 'app' ? 'on' : ''}" onclick="setLevel('app')"/>
+        <Button text="Error" variant="ghost" class="{level == 'error' ? 'on' : ''}" onclick="setLevel('error')"/>
+        <Button text="Notice" variant="ghost" class="{level == 'notice' ? 'on' : ''}" onclick="setLevel('notice')"/>
+      </HBox>
+      <IconButton icon="refresh" title="Refresh" onclick="refreshList()"/>
+      <IconButton icon="trash" title="Clear log" onclick="clearAll()"/>
+    </HBox>
+
+    <Scroll class="logs-body" flex="1">
+      <For each="visible()" as="e" key="e.id">
+        <HBox class="log-row">
+          <Label class="log-time" text="{stamp(e.time)}"/>
+          <Label class="log-level lvl-{e.level}" text="{lvl(e.level)}"/>
+          <Label class="log-msg" text="{e.message}" flex="1"/>
+        </HBox>
+      </For>
+      <VBox class="empty" if="{len(visible()) == 0}">
+        <Icon name="list" size="36"/>
+        <Label text="No log entries"/>
+      </VBox>
+    </Scroll>
+
+    <HBox class="logs-foot">
+      <Label class="set-desc" text="Kernel ring buffer · last 400 events" flex="1"/>
+      <Label class="ui-badge" text="{len(visible())}"/>
+    </HBox>
+  </VBox>
+</Window>
