@@ -392,6 +392,10 @@ main.ts
 应用实现说明）见 **[docs/](docs/README.md)**。系统内也有同样内容的
 **Language Docs** 应用，可以直接在桌面里查。
 
+系统源码从 bundle 到 VFS 的完整链路、升级覆盖规则与实施计划见
+[docs/system-source.md](docs/system-source.md)；语言层自举见
+[docs/bootstrap.md](docs/bootstrap.md)。
+
 ## License
 
 [MIT](LICENSE) © 2026 Cyberexplorer

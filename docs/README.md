@@ -36,6 +36,15 @@
 | [apps/ide.md](apps/ide.md) | IDE：布局、快捷键、运行模型与实现 |
 | [apps/utilities.md](apps/utilities.md) | Tasks、Clock、Preview、Logs 与系统设置项 |
 
+## 系统源码
+
+系统自己的 OSL/OML、图标、语言包与文档如何在构建期内联、启动时写进 VFS、
+运行时被优先读取，以及升级时如何避免冲掉用户改动。
+
+| 文档 | 内容 |
+| --- | --- |
+| [system-source.md](system-source.md) | 四段链路、覆盖判定、现状缺陷、目标规则、实施清单与验收 |
+
 ## 自举
 
 用 OSL 写一个 OSL 解释器，从半自举（只换前端）一路到两级自举。
