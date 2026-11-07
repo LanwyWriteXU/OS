@@ -64,8 +64,8 @@ pnpm preview        # http://127.0.0.1:4173
 | --- | --- |
 | ![IDE](docs/screenshots/ide.jpg) | ![浅色主题](docs/screenshots/light.jpg) |
 
-应用图标共用一套网格：48×48 画布、12 px 圆角、统一深色底、2.2 px 白色线性图形，
-只用 20% 左右的应用色偏做区分。
+所有图标都是手写的 SVG 线稿：48×48 viewBox、1.85 px 描边、`currentColor` 继承
+主题前景色 —— 没有图标字体、没有 emoji、没有外部请求，深色浅色都能直接用。
 
 ![应用图标](docs/screenshots/icons.png)
 
@@ -145,7 +145,7 @@ pnpm preview        # http://127.0.0.1:4173
 
 | 应用 | 说明 |
 | --- | --- |
-| **Files** | 文件管理器，侧栏直达系统源码、图标、文档；支持新建 / 重命名 / 删除 |
+| **File Manager** | 文件管理器，侧栏直达系统源码、图标、文档；图标/列表两种视图，支持新建 / 重命名 / 删除 |
 | **Terminal** | 上面那套 shell |
 | **Editor** | 纯文本编辑器，`Ctrl + S` 保存，带文件选择器 |
 | **IDE** | 编辑器 + 语法高亮 + 运行输出面板，可跑 OSL 脚本 |
