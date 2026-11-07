@@ -1,0 +1,4 @@
+# pnpm 11+ reads build-script approvals from here (not from package.json).
+# esbuild ships a native binary and needs its install script to unpack it.
+allowBuilds:
+  esbuild: true

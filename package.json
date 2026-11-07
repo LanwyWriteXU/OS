@@ -4,6 +4,7 @@
   "version": "1.1.0",
   "description": "OS — a toy desktop environment with the OSL language and OML markup UI",
   "type": "module",
+  "packageManager": "pnpm@12.9.1",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "tsc --noEmit && vite build",

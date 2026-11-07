@@ -18,6 +18,19 @@ npm run build    # tsc --noEmit && vite build
 npm run preview
 ```
 
+## 部署到 GitHub Pages
+
+仓库自带 `.github/workflows/deploy.yml`：push 到 `main` 就构建并发布，不需要 gh-pages 分支。
+
+1. 仓库 **Settings → Pages → Build and deployment → Source** 选 **GitHub Actions**。
+2. push 到 `main`（或在 Actions 页手动 Run workflow）。
+3. 发布地址：`https://<用户名>.github.io/OS/`。
+
+之所以不用改 `base`：`vite.config.ts` 里已经是 `base: './'`，产物引用的是
+`./assets/...`，放在 `/OS/` 子路径或自定义域名根目录都能跑。整个应用没有运行时
+`fetch`，图标和 OSL/OML 源码都在构建时被内联进 bundle，所以也不需要额外的静态文件。
+
+
 ## 截图
 
 | 桌面（Windows 风格） | 开始菜单 |
