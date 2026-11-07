@@ -1,0 +1,634 @@
+# parser.osl — the OSL parser, written in OSL (bootstrap stage S2).
+#
+# Recursive descent with precedence climbing. Produces exactly the AST of
+# src/osl/parser.ts: same node types, same fields, same key order.
+#
+# Entry point:  parse(src) -> Program
+#
+# Deliberately lenient in one place: the host's hand-written cascade accepts a
+# narrower set of operand positions (e.g. `a == not b` is a syntax error there
+# but parses here). Both accept the same programs; only already-invalid input
+# reports slightly differently.
+
+from "lexer.osl" import lex
+
+const ASSIGN_OPS = ["=", "+=", "-=", "*=", "/=", "%=", "**="]
+
+
+class Parser:
+    fn init(toks):
+        self.toks = toks
+        self.pos = 0
+        self.end = len(toks) - 1
+
+    # ------------------------------------------------------ token access
+
+    fn tokAt(k):
+        if k < 0:
+            return self.toks[0]
+        if k > self.end:
+            return self.toks[self.end]
+        return self.toks[k]
+
+    fn peek(off = 0):
+        return self.tokAt(self.pos + off)
+
+    fn at(t):
+        return self.peek().t == t
+
+    fn atOp(v):
+        let k = self.peek()
+        return k.t == "OP" and k.v == v
+
+    fn atKw(v):
+        let k = self.peek()
+        return k.t == "NAME" and k.v == v
+
+    fn next():
+        let k = self.toks[self.pos]
+        if self.pos < self.end:
+            self.pos += 1
+        return k
+
+    fn tokText(k):
+        if k.v != None:
+            return str(k.v)
+        return k.t
+
+    fn fail(msg, k):
+        raise msg + " (line " + str(k.line) + ", col " + str(k.col) + ")"
+
+    fn expect(t, msg = ""):
+        let k = self.peek()
+        if k.t != t:
+            if msg == "":
+                self.fail("Expected " + t + " but found " + k.t, k)
+            self.fail(msg, k)
+        return self.next()
+
+    fn expectOp(v):
+        let k = self.peek()
+        if k.t != "OP" or k.v != v:
+            self.fail("Expected '" + v + "'", k)
+        return self.next()
+
+    fn expectKw(v):
+        let k = self.peek()
+        if k.t != "NAME" or k.v != v:
+            self.fail("Expected '" + v + "'", k)
+        return self.next()
+
+    fn expectName():
+        let k = self.expect("NAME")
+        return k.v
+
+    fn endStatement():
+        if self.at("NEWLINE"):
+            self.next()
+            return
+        if self.at("DEDENT") or self.at("EOF"):
+            return
+        if self.atOp(";"):
+            self.next()
+            return
+        let k = self.peek()
+        self.fail("Unexpected token '" + self.tokText(k) + "'", k)
+
+    # ------------------------------------------------------------ program
+
+    fn program():
+        let body = []
+        while not self.at("EOF"):
+            if self.at("NEWLINE") or self.at("INDENT") or self.at("DEDENT"):
+                self.next()
+                continue
+            body.append(self.statement())
+        return {"type": "Program", "body": body}
+
+    # --------------------------------------------------------- statements
+
+    fn block():
+        self.expect("NEWLINE", "Expected ':' followed by a new line")
+        if self.at("INDENT"):
+            self.next()
+            let body = []
+            while not self.at("DEDENT") and not self.at("EOF"):
+                if self.at("NEWLINE"):
+                    self.next()
+                    continue
+                body.append(self.statement())
+            if self.at("DEDENT"):
+                self.next()
+            return body
+        # inline body:  if x: return 1
+        return [self.statement()]
+
+    fn statement():
+        let k = self.peek()
+        let line = k.line
+        if k.t == "NAME":
+            let v = k.v
+            if v == "let" or v == "var" or v == "const":
+                return self.varDecl()
+            if v == "fn":
+                return self.funcDecl()
+            if v == "class":
+                return self.classDecl()
+            if v == "if":
+                return self.ifStmt()
+            if v == "while":
+                return self.whileStmt()
+            if v == "for":
+                return self.forStmt()
+            if v == "try":
+                return self.tryStmt()
+            if v == "import":
+                return self.importStmt()
+            if v == "from":
+                return self.fromImport()
+            if v == "export":
+                # `export` is an optional marker: modules expose every
+                # top-level binding, so it parses as the inner statement.
+                self.next()
+                return self.statement()
+            if v == "return":
+                self.next()
+                let value = None
+                if not self.at("NEWLINE") and not self.at("DEDENT") and not self.at("EOF"):
+                    value = self.expression()
+                self.endStatement()
+                return {"type": "Return", "value": value, "line": line}
+            if v == "break":
+                self.next()
+                self.endStatement()
+                return {"type": "Break", "line": line}
+            if v == "continue":
+                self.next()
+                self.endStatement()
+                return {"type": "Continue", "line": line}
+            if v == "pass":
+                self.next()
+                self.endStatement()
+                return {"type": "Pass", "line": line}
+            if v == "raise":
+                self.next()
+                let value = self.expression()
+                self.endStatement()
+                return {"type": "Raise", "value": value, "line": line}
+            if v == "throw":
+                self.next()
+                let value = {"type": "None"}
+                if not self.at("NEWLINE") and not self.at("DEDENT") and not self.at("EOF"):
+                    value = self.expression()
+                self.endStatement()
+                return {"type": "Throw", "value": value, "line": line}
+
+        let expr = self.expression()
+        let op = self.peek()
+        if op.t == "OP" and op.v in ASSIGN_OPS:
+            self.next()
+            let value = self.expression()
+            self.endStatement()
+            return {"type": "Assign", "target": expr, "op": op.v, "value": value, "line": line}
+        self.endStatement()
+        return {"type": "ExprStmt", "expr": expr, "line": line}
+
+    fn varDecl():
+        let kw = self.next()
+        let name = self.expectName()
+        let value = {"type": "None"}
+        if self.atOp("="):
+            self.next()
+            value = self.expression()
+        self.endStatement()
+        return {"type": "VarDecl", "kind": kw.v, "name": name, "value": value, "line": kw.line}
+
+    fn params():
+        self.expectOp("(")
+        let out = []
+        while not self.atOp(")"):
+            let name = self.expectName()
+            let def = None
+            if self.atOp("="):
+                self.next()
+                def = self.expression()
+            out.append({"name": name, "def": def})
+            if self.atOp(","):
+                self.next()
+            else:
+                break
+        self.expectOp(")")
+        return out
+
+    fn funcDecl():
+        let kw = self.next()
+        let name = self.expectName()
+        let params = self.params()
+        if self.atOp("->"):
+            self.next()
+            self.expectName()
+        self.expectOp(":")
+        let body = self.block()
+        return {"type": "FuncDecl", "name": name, "params": params, "body": body, "line": kw.line}
+
+    fn classDecl():
+        let kw = self.next()
+        let name = self.expectName()
+        let parent = None
+        if self.atKw("extends"):
+            self.next()
+            parent = self.expectName()
+        self.expectOp(":")
+        self.expect("NEWLINE")
+        self.expect("INDENT", "Expected class body")
+        let methods = []
+        while not self.at("DEDENT") and not self.at("EOF"):
+            if self.at("NEWLINE"):
+                self.next()
+                continue
+            if self.atKw("fn"):
+                methods.append(self.funcDecl())
+            elif self.atKw("pass"):
+                self.next()
+            else:
+                let k = self.peek()
+                self.fail("Only methods are allowed in a class body", k)
+        self.expect("DEDENT")
+        return {"type": "ClassDecl", "name": name, "parent": parent, "methods": methods, "line": kw.line}
+
+    fn ifStmt():
+        let kw = self.next()
+        let branches = []
+        let cond = self.expression()
+        self.expectOp(":")
+        branches.append({"cond": cond, "body": self.block()})
+        while self.atKw("elif"):
+            self.next()
+            let c = self.expression()
+            self.expectOp(":")
+            branches.append({"cond": c, "body": self.block()})
+        let orelse = None
+        if self.atKw("else"):
+            self.next()
+            self.expectOp(":")
+            orelse = self.block()
+        return {"type": "If", "branches": branches, "orelse": orelse, "line": kw.line}
+
+    fn whileStmt():
+        let kw = self.next()
+        let cond = self.expression()
+        self.expectOp(":")
+        let body = self.block()
+        return {"type": "While", "cond": cond, "body": body, "line": kw.line}
+
+    fn forStmt():
+        let kw = self.next()
+        let name = self.expectName()
+        if self.atOp(","):
+            self.next()
+            let second = self.expectName()
+            self.expectKw("in")
+            let iter = self.expression()
+            self.expectOp(":")
+            let body = self.block()
+            return {"type": "For", "name": name, "name2": second, "iter": iter, "body": body, "line": kw.line}
+        self.expectKw("in")
+        let iter = self.expression()
+        self.expectOp(":")
+        let body = self.block()
+        return {"type": "For", "name": name, "iter": iter, "body": body, "line": kw.line}
+
+    fn tryStmt():
+        let kw = self.next()
+        self.expectOp(":")
+        let body = self.block()
+        let catchName = "e"
+        let catchBody = None
+        if self.atKw("catch") or self.atKw("except"):
+            self.next()
+            if self.at("NAME"):
+                catchName = self.expectName()
+            self.expectOp(":")
+            catchBody = self.block()
+        let finallyBody = None
+        if self.atKw("finally"):
+            self.next()
+            self.expectOp(":")
+            finallyBody = self.block()
+        return {
+            "type": "Try",
+            "body": body,
+            "catchName": catchName,
+            "catchBody": catchBody,
+            "finallyBody": finallyBody,
+            "line": kw.line,
+        }
+
+    fn importStmt():
+        let kw = self.expectKw("import")
+        let path = self.expect("STRING", "Expected a module path string").v.s
+        let alias = None
+        if self.atKw("as"):
+            self.next()
+            alias = self.expectName()
+        self.endStatement()
+        return {"type": "Import", "path": path, "alias": alias, "line": kw.line}
+
+    fn fromImport():
+        let kw = self.expectKw("from")
+        let path = self.expect("STRING", "Expected a module path string").v.s
+        self.expectKw("import")
+        let names = []
+        while True:
+            let name = self.expectName()
+            let alias = None
+            if self.atKw("as"):
+                self.next()
+                alias = self.expectName()
+            names.append({"name": name, "alias": alias})
+            if self.atOp(","):
+                self.next()
+                continue
+            break
+        self.endStatement()
+        return {"type": "FromImport", "path": path, "names": names, "line": kw.line}
+
+    # -------------------------------------------------------- expressions
+
+    fn expression():
+        let expr = self.binary(0)
+        if self.atKw("if"):
+            self.next()
+            let cond = self.binary(0)
+            self.expectKw("else")
+            let other = self.expression()
+            return {"type": "Ternary", "cond": cond, "a": expr, "b": other, "line": expr.line}
+        if self.atOp("?"):
+            self.next()
+            let a = self.expression()
+            self.expectOp(":")
+            let b = self.expression()
+            return {"type": "Ternary", "cond": expr, "a": a, "b": b, "line": expr.line}
+        return expr
+
+    # Binding powers. Unary minus binds tighter than `*` but looser than `**`,
+    # `not` sits at the comparison level — both match the host cascade.
+    #   or 1 · and 2 · comparison 3 · +- 4 · */% 5 · ** 6
+    fn binOp():
+        let k = self.peek()
+        if k.t == "OP":
+            let v = k.v
+            if v == "||":
+                return ["or", 1, False, 1]
+            if v == "&&":
+                return ["and", 2, False, 1]
+            if v == "==" or v == "!=" or v == "<" or v == "<=" or v == ">" or v == ">=":
+                return [v, 3, False, 1]
+            if v == "+" or v == "-":
+                return [v, 4, False, 1]
+            if v == "*" or v == "/" or v == "//" or v == "%":
+                return [v, 5, False, 1]
+            if v == "**":
+                return ["**", 6, True, 1]
+            return None
+        if k.t == "NAME":
+            let v = k.v
+            if v == "or":
+                return ["or", 1, False, 1]
+            if v == "and":
+                return ["and", 2, False, 1]
+            if v == "in":
+                return ["in", 3, False, 1]
+            if v == "is":
+                let n = self.peek(1)
+                if n.t == "NAME" and n.v == "not":
+                    return ["isnot", 3, False, 2]
+                return ["is", 3, False, 1]
+            if v == "not":
+                let n = self.peek(1)
+                if n.t == "NAME" and n.v == "in":
+                    return ["notin", 3, False, 2]
+                return None
+        return None
+
+    fn binary(minBp):
+        let left = self.prefix()
+        while True:
+            let info = self.binOp()
+            if info == None:
+                break
+            if info[1] < minBp:
+                break
+            left = self.binaryNode(left, info)
+        return left
+
+    fn binaryNode(left, info):
+        let opTok = self.peek()
+        let k = 0
+        while k < info[3]:
+            self.next()
+            k += 1
+        let rhsBp = info[1] + 1
+        if info[2]:
+            rhsBp = info[1]
+        let right = self.binary(rhsBp)
+        return {"type": "Bin", "op": info[0], "l": left, "r": right, "line": opTok.line}
+
+    fn prefix():
+        let k = self.peek()
+        if k.t == "OP":
+            if k.v == "-" or k.v == "+":
+                self.next()
+                return {"type": "Unary", "op": k.v, "arg": self.binary(6), "line": k.line}
+            if k.v == "!":
+                self.next()
+                return {"type": "Unary", "op": "not", "arg": self.binary(3), "line": k.line}
+        if k.t == "NAME" and k.v == "not":
+            self.next()
+            return {"type": "Unary", "op": "not", "arg": self.binary(3), "line": k.line}
+        return self.postfix(self.primary())
+
+    fn postfix(base):
+        let expr = base
+        while True:
+            if self.atOp("("):
+                let tok = self.next()
+                let args = []
+                while not self.atOp(")"):
+                    args.append(self.expression())
+                    if self.atOp(","):
+                        self.next()
+                    else:
+                        break
+                self.expectOp(")")
+                expr = {"type": "Call", "callee": expr, "args": args, "line": tok.line}
+                continue
+            if self.atOp("["):
+                let tok = self.next()
+                let start = None
+                let end = None
+                let isSlice = False
+                if not self.atOp(":"):
+                    start = self.expression()
+                if self.atOp(":"):
+                    isSlice = True
+                    self.next()
+                    if not self.atOp("]"):
+                        end = self.expression()
+                self.expectOp("]")
+                if isSlice:
+                    expr = {"type": "Slice", "obj": expr, "start": start, "end": end, "line": tok.line}
+                else:
+                    expr = {"type": "Index", "obj": expr, "index": start, "line": tok.line}
+                continue
+            if self.atOp("."):
+                let tok = self.next()
+                let k = self.peek()
+                if k.t == "NAME":
+                    self.next()
+                    expr = {"type": "Member", "obj": expr, "name": k.v, "line": tok.line}
+                    continue
+                if k.t == "NUMBER":
+                    self.next()
+                    expr = {"type": "Member", "obj": expr, "name": str(k.v), "line": tok.line}
+                    continue
+                self.fail("Expected a property name", tok)
+            break
+        return expr
+
+    # `(` starts either a lambda `(a, b) => …` or a grouped expression. The
+    # host tries the lambda form and rolls back on failure; a lookahead gives
+    # the same answer without exceptions.
+    fn isParenLambda():
+        let k = self.pos + 1
+        if self.tokAt(k).t != "NAME":
+            if self.tokAt(k).t == "OP" and self.tokAt(k).v == ")":
+                let n = self.tokAt(k + 1)
+                return n.t == "OP" and n.v == "=>"
+            return False
+        while True:
+            if self.tokAt(k).t != "NAME":
+                return False
+            k += 1
+            let sep = self.tokAt(k)
+            if sep.t == "OP" and sep.v == ",":
+                k += 1
+                continue
+            if sep.t == "OP" and sep.v == ")":
+                let n = self.tokAt(k + 1)
+                return n.t == "OP" and n.v == "=>"
+            return False
+
+    fn lambdaParams():
+        self.expectOp("(")
+        let names = []
+        while not self.atOp(")"):
+            names.append(self.expectName())
+            if self.atOp(","):
+                self.next()
+            else:
+                break
+        self.expectOp(")")
+        return names
+
+    fn primary():
+        let k = self.peek()
+
+        if k.t == "NUMBER":
+            self.next()
+            return {"type": "Num", "value": k.v, "line": k.line}
+
+        if k.t == "STRING":
+            self.next()
+            return {"type": "Str", "value": k.v.s, "f": k.v.f, "line": k.line}
+
+        if k.t == "NAME":
+            let v = k.v
+            if v == "True" or v == "true":
+                self.next()
+                return {"type": "Bool", "value": True, "line": k.line}
+            if v == "False" or v == "false":
+                self.next()
+                return {"type": "Bool", "value": False, "line": k.line}
+            if v == "None" or v == "nil" or v == "null":
+                self.next()
+                return {"type": "None", "line": k.line}
+            if v == "fn" or v == "lambda":
+                self.next()
+                let ps = self.params()
+                let names = []
+                let defs = []
+                for p in ps:
+                    names.append(p.name)
+                    defs.append(p.def)
+                if self.atOp("=>"):
+                    self.next()
+                    let body = self.expression()
+                    return {
+                        "type": "Lambda",
+                        "params": names,
+                        "defaults": defs,
+                        "body": body,
+                        "line": k.line,
+                    }
+                self.expectOp(":")
+                let body = self.block()
+                return {
+                    "type": "LambdaBlock",
+                    "params": names,
+                    "defaults": defs,
+                    "body": body,
+                    "line": k.line,
+                }
+            let n1 = self.peek(1)
+            if n1.t == "OP" and n1.v == "=>":
+                self.next()
+                self.next()
+                let body = self.expression()
+                return {"type": "Lambda", "params": [v], "body": body, "line": k.line}
+            self.next()
+            return {"type": "Name", "name": v, "line": k.line}
+
+        if k.t == "OP" and k.v == "(":
+            if self.isParenLambda():
+                let names = self.lambdaParams()
+                self.expectOp("=>")
+                let body = self.expression()
+                return {"type": "Lambda", "params": names, "body": body, "line": k.line}
+            self.next()
+            let inner = self.expression()
+            self.expectOp(")")
+            return inner
+
+        if k.t == "OP" and k.v == "[":
+            self.next()
+            let items = []
+            while not self.atOp("]"):
+                items.append(self.expression())
+                if self.atOp(","):
+                    self.next()
+                else:
+                    break
+            self.expectOp("]")
+            return {"type": "List", "items": items, "line": k.line}
+
+        if k.t == "OP" and k.v == "{":
+            self.next()
+            let pairs = []
+            while not self.atOp("}"):
+                let key = self.expression()
+                self.expectOp(":")
+                let val = self.expression()
+                pairs.append({"k": key, "v": val})
+                if self.atOp(","):
+                    self.next()
+                else:
+                    break
+            self.expectOp("}")
+            return {"type": "Dict", "pairs": pairs, "line": k.line}
+
+        self.fail("Unexpected token '" + self.tokText(k) + "'", k)
+
+
+fn parse(src):
+    return Parser(lex(src)).program()

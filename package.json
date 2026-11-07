@@ -9,9 +9,10 @@
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
-    "check": "tsc --noEmit && esbuild tests/p0-lang.ts --bundle --platform=node --format=cjs --outfile=.tmp/p0-lang.cjs && node .tmp/p0-lang.cjs && esbuild tools/osl-devkit.ts --bundle --platform=node --format=cjs --outfile=.tmp/devkit.cjs && node .tmp/devkit.cjs tokens",
+    "check": "tsc --noEmit && esbuild tests/p0-lang.ts --bundle --platform=node --format=cjs --outfile=.tmp/p0-lang.cjs && node .tmp/p0-lang.cjs && esbuild tools/osl-devkit.ts --bundle --platform=node --format=cjs --outfile=.tmp/devkit.cjs && node .tmp/devkit.cjs tokens && node .tmp/devkit.cjs ast",
     "bench": "esbuild tools/osl-devkit.ts --bundle --platform=node --format=cjs --outfile=.tmp/devkit.cjs && node .tmp/devkit.cjs bench",
-    "devkit": "esbuild tools/osl-devkit.ts --bundle --platform=node --format=cjs --outfile=.tmp/devkit.cjs && node .tmp/devkit.cjs"
+    "devkit": "esbuild tools/osl-devkit.ts --bundle --platform=node --format=cjs --outfile=.tmp/devkit.cjs && node .tmp/devkit.cjs",
+    "frontend": "esbuild tools/osl-devkit.ts --bundle --platform=node --format=cjs --outfile=.tmp/devkit.cjs && node .tmp/devkit.cjs frontend"
   },
   "devDependencies": {
     "esbuild": "0.21.5",

@@ -309,6 +309,7 @@ src/
     interp.ts       树遍历解释器（作用域、闭包、类、异常、切片）
     builtins.ts     fs / paths / sys / ui / win / time / math / json / store / clip
     host.ts         宿主能力接口
+    self/           用 OSL 自己写的词法与语法分析（自举 S1/S2，见 docs/bootstrap.md）
   oml/            OML 实现
     parser.ts       XML 方言解析（属性、自闭合、注释、实体）
     widgets.ts      标签 → DOM 组件 + 布局属性

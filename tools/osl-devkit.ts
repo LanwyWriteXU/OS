@@ -19,20 +19,24 @@
 import { Interpreter, NativeFunction, NativeObject } from '../src/osl/interp';
 import { lex } from '../src/osl/lexer';
 import { parseProgram } from '../src/osl/parser';
-import { readFileSync, existsSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 
 const SELF_LEXER = 'src/osl/self/lexer.osl';
 const SELF_PARSER = 'src/osl/self/parser.osl';
 
 /* ------------------------------------------------------------------ 语料 */
 
-function oslFiles(): string[] {
-  try {
-    return execSync('git ls-files "*.osl"', { encoding: 'utf8' }).trim().split('\n').filter(Boolean).sort();
-  } catch {
-    return [];
+/**
+ * 仓库里全部 .osl。直接遍历目录而不是 `git ls-files`——未提交的新文件也是语料，
+ * 否则自举源码自己会被漏掉。
+ */
+function oslFiles(dir = 'src', out: string[] = []): string[] {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = `${dir}/${e.name}`;
+    if (e.isDirectory()) oslFiles(p, out);
+    else if (e.name.endsWith('.osl')) out.push(p);
   }
+  return out.sort();
 }
 
 function countNodes(ast: any): number {
@@ -90,6 +94,8 @@ function bareInterpreter(maxSteps = 900_000_000, maxDepth = 100_000): Interprete
 function loadSelfModule(file: string, fn: string, args: string) {
   const src = readFileSync(file, 'utf8');
   const i = bareInterpreter();
+  // 让 `import "lexer.osl"` 这类相对路径解析到源码旁边（VFS 里是同目录）
+  i.modulePath = file;
   i.run(src);
   const callable = i.globals.get(fn);
   return (input: string) => i.callFunction(callable, [input, ...args ? [args] : []]);
@@ -118,6 +124,8 @@ function diffValue(a: any, b: any, path = '$', out: string[] = []): string[] {
     const kb = Object.keys(b);
     for (const k of ka) if (!(k in b)) out.push(`${path}.${k}: 宿主有、自举缺失`);
     for (const k of kb) if (!(k in a)) out.push(`${path}.${k}: 自举多出、宿主没有`);
+    // 键顺序也要一致：AST 快照按 JSON 序列化做缓存，顺序变了快照就不可复现
+    if (ka.join('<') !== kb.join('<')) out.push(`${path}: 键顺序 ${ka.join(',')} vs ${kb.join(',')}`);
     for (const k of ka) if (k in b) diffValue(a[k], b[k], `${path}.${k}`, out);
     return out;
   }
@@ -229,12 +237,10 @@ for nd in nodes:
       nodes += countNodes(parseProgram(src));
     }
     line(`语料   ${files.length} 个文件 / ${lines} 行 / ${chars.toLocaleString()} 字符 / ${toks.toLocaleString()} token / ${nodes.toLocaleString()} AST 节点`);
-    const perChar = 67; // 实测：src/osl/self/lexer.osl 约 67 步/字符
-    const perTok = 200; // 估算：优先级下降 + 建节点，S2 落地后替换为实测值
-    const lexSteps = chars * perChar;
-    const parseSteps = toks * perTok;
+    // 实测：词法 68 步/字符、解析 109 步/字符（见 `pnpm frontend`）
+    const perChar = 177;
     const rate = 450_000;
-    line(`预算   前端（全语料）≈ ${((lexSteps + parseSteps) / 1e6).toFixed(1)}M 步 ≈ ${((lexSteps + parseSteps) / rate).toFixed(1)} s（按 ${(rate / 1000).toFixed(0)}k 步/秒）`);
+    line(`预算   前端（全语料）≈ ${((chars * perChar) / 1e6).toFixed(1)}M 步 ≈ ${((chars * perChar) / rate).toFixed(1)} s（按 ${(rate / 1000).toFixed(0)}k 步/秒）`);
   }
 
   // 5) 真实 OSL 负载
@@ -288,6 +294,13 @@ const EDGE_CASES = [
 ];
 
 function compareOne(label: string, src: string, kind: 'tokens' | 'ast', call: (s: string) => any): boolean {
+  let want: any;
+  try {
+    want = kind === 'tokens' ? lex(src) : parseProgram(src);
+  } catch (e: any) {
+    console.log(`· ${label} 宿主本身就拒绝，跳过（${String(e.message).split('\n')[0]}）`);
+    return true;
+  }
   let got: any;
   try {
     got = plain(call(src));
@@ -295,7 +308,6 @@ function compareOne(label: string, src: string, kind: 'tokens' | 'ast', call: (s
     console.log(`✗ ${label}\n    自举侧抛错：${String(e.message).split('\n')[0]}`);
     return false;
   }
-  const want = kind === 'tokens' ? lex(src) : parseProgram(src);
   const d = diffValue(want, got);
   if (d.length) {
     console.log(`✗ ${label}\n    ${d.slice(0, 4).join('\n    ')}`);
@@ -331,7 +343,7 @@ function compareCorpus(kind: 'tokens' | 'ast') {
   }
 
   // 2) 极端用例
-  if (kind === 'tokens') {
+  {
     for (let k = 0; k < EDGE_CASES.length; k++) {
       total++;
       const label = `case ${String(k).padStart(2, '0')} ${JSON.stringify(EDGE_CASES[k]).slice(0, 44)}`;
@@ -344,7 +356,70 @@ function compareCorpus(kind: 'tokens' | 'ast') {
   return bad === 0 ? 0 : 1;
 }
 
+/**
+ * 前端成本实测：自举词法器 / 解析器跑全语料要多少步、多少秒。
+ * 这两个数字决定了 L0（半自举）能不能真的用起来。
+ */
+function cmdFrontend() {
+  const files = oslFiles();
+  if (!existsSync(SELF_LEXER)) {
+    console.log(`${SELF_LEXER} 不存在，S1 未开始。`);
+    return 0;
+  }
+
+  // 每个阶段单独一个解释器实例，模块加载与前面的测量互不干扰
+  const lexer = bareInterpreter();
+  lexer.modulePath = SELF_LEXER;
+  lexer.run(readFileSync(SELF_LEXER, 'utf8'));
+  const lexFn = lexer.globals.get('lex');
+  let chars = 0;
+  let toks = 0;
+  lexer.steps = 0;
+  let t0 = performance.now();
+  for (const f of files) {
+    const src = readFileSync(f, 'utf8');
+    chars += src.length;
+    toks += (lexer.callFunction(lexFn, [src]) as any[]).length;
+  }
+  let dt = performance.now() - t0;
+  console.log(
+    `词法   ${files.length} 文件 / ${chars.toLocaleString()} 字符 → ${toks.toLocaleString()} token，` +
+      `${dt.toFixed(0)} ms / ${lexer.steps.toLocaleString()} 步 → ${Math.round(lexer.steps / chars)} 步/字符，` +
+      `${Math.round(chars / (dt / 1000)).toLocaleString()} 字符/秒`,
+  );
+
+  if (!existsSync(SELF_PARSER)) {
+    console.log(`${SELF_PARSER} 不存在，S2 未开始。`);
+    return 0;
+  }
+
+  const parser = bareInterpreter();
+  parser.modulePath = SELF_PARSER;
+  parser.run(readFileSync(SELF_PARSER, 'utf8'));
+  const parseFn = parser.globals.get('parse');
+  const shell = readFileSync('src/system/shell.osl', 'utf8');
+  parser.steps = 0;
+  t0 = performance.now();
+  parser.callFunction(parseFn, [shell]);
+  dt = performance.now() - t0;
+  console.log(
+    `解析   shell.osl ${shell.length.toLocaleString()} 字符 → ${dt.toFixed(0)} ms / ${parser.steps.toLocaleString()} 步`,
+  );
+
+  parser.steps = 0;
+  t0 = performance.now();
+  for (const f of files) parser.callFunction(parseFn, [readFileSync(f, 'utf8')]);
+  dt = performance.now() - t0;
+  const total = lexer.steps + parser.steps;
+  console.log(
+    `合计   全语料 词法 ${(lexer.steps / 1e6).toFixed(1)}M + 解析 ${(parser.steps / 1e6).toFixed(1)}M ` +
+      `= ${(total / 1e6).toFixed(1)}M 步 ≈ ${(total / 450_000).toFixed(1)} s（按 450k 步/秒）`,
+  );
+  return 0;
+}
+
 const cmd = process.argv[2] || 'bench';
 if (cmd === 'bench') cmdBench();
+else if (cmd === 'frontend') process.exitCode = cmdFrontend();
 else if (cmd === 'tokens' || cmd === 'ast') process.exitCode = compareCorpus(cmd);
-else console.log(`未知子命令 '${cmd}'，可用：bench | tokens | ast`);
+else console.log(`未知子命令 '${cmd}'，可用：bench | frontend | tokens | ast`);

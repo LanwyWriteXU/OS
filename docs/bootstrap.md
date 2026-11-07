@@ -36,13 +36,21 @@ pnpm devkit ast            # S2 验收：逐字段比对
 一次典型输出（Node 22 / 桌面浏览器量级相当，波动 ±10%）：
 
 ```
-吞吐   fib(22) 1131 ms / 515,815 步 → 456,116 步/秒
-嵌套   21,000 个 AST 节点 628 ms / 414,014 步 → 20 步/节点，33,445 节点/秒
+吞吐   fib(22) 1244 ms / 515,815 步 → 414,577 步/秒
+嵌套   21,000 个 AST 节点 544 ms / 414,014 步 → 20 步/节点，38,625 节点/秒
        折算：自举解释器里每解释一个 AST 节点，要多花 20 个外层步
 深度   OSL 调用栈实测上限 ≈ 1797（再深宿主抛 RangeError，不是干净报错）
-语料   20 个文件 / 4366 行 / 112,132 字符 / 29,309 token / 15,361 AST 节点
-预算   前端（全语料）≈ 13.4M 步 ≈ 29.7 s（按 450k 步/秒）
-负载   markdown.parse(12516 字符) 164 ms / 179,911 步 → 自举后约 8.0 s（×20）
+语料   22 个文件 / 5364 行 / 145,629 字符 / 37,108 token / 19,584 AST 节点
+预算   前端（全语料）≈ 25.8M 步 ≈ 57.3 s（按 450k 步/秒）
+负载   markdown.parse(12516 字符) 156 ms / 179,911 步 → 自举后约 8.0 s（×20）
+```
+
+前端拆开看（`pnpm frontend`，随 S1/S2 落地换成了实测值）：
+
+```
+词法   22 文件 / 145,629 字符 → 37,108 token，7045 ms / 9.77M 步 → 67 步/字符，20,672 字符/秒
+解析   shell.osl 39,897 字符 → 3938 ms / 4.29M 步 → 109 步/字符
+合计   词法 9.8M + 解析 15.7M = 25.4M 步 ≈ 56.5 s
 ```
 
 四条结论：
@@ -52,9 +60,9 @@ pnpm devkit ast            # S2 验收：逐字段比对
    完整求值器带 `call`/`if`/`ret` 分发时约 31 步）。这就是自举的税率。
 3. **递归深度上限约 1800 层**，超过是宿主 JS 栈的 `RangeError`，不是干净报错。
    `interp.ts:153` 的 `maxDepth = 180` 是保守护栏，不是物理极限。
-4. **全语料前端约 30 秒**。一次性成本，可以缓存成 AST 快照，所以可接受；
-   但如果每次启动都重算，体验不可接受。其中词法占 7.5M 步（实测 67 步/字符），
-   解析按 200 步/token 估 5.9M 步——S1 已经落地，S2 之后这两个数都会换成实测值。
+4. **全语料前端约 57 秒**（词法 + 解析，全是实测）。换成"每个文件"更有意义：
+   177 步/字符 → `shell.osl`（4 万字符）约 6 秒，普通应用（0.8–1 万字符）1–3 秒。
+   所以 L0 半自举能跑，但**必须配 AST 缓存**，否则每开一个窗口都要等几秒。
 
 ### 语料规模
 
@@ -64,8 +72,12 @@ pnpm devkit ast            # S2 验收：逐字段比对
 | `system/markdown.osl` | 301 | 8,583 | 2,100 | 1,143 |
 | `apps/ide/ide.osl` | 418 | 10,377 | 2,792 | 1,480 |
 | `apps/files/files.osl` | 329 | 8,097 | 2,391 | 1,252 |
+| `osl/self/lexer.osl` + `parser.osl` | 808 | 22,203 | 5,939 | 3,130 |
 | 其余 16 个应用 | 1911 | 45,178 | 12,054 | 6,290 |
-| **合计** | **4366** | **112,132** | **29,309** | **15,361** |
+| **合计** | **5364** | **145,629** | **37,108** | **19,584** |
+
+自举源码本身也在这份语料里——每次 `pnpm devkit ast` 都在验证"OSL 解析器能解析
+自己的源码，且产出与宿主逐字段一致"。
 
 `nodes / token ≈ 0.52`，`chars / token ≈ 3.83` — 估算前端成本时用这两个比值。
 
@@ -194,21 +206,27 @@ pnpm bench     # 基线数字可复现
 Windows 检出下的报错行号整体偏移。`src/osl/lexer.ts` 与 `self/lexer.osl` 同步修正，
 现在 LF / CRLF 报出的行号一致——词法比对的 66 项里专门留了两条 CRLF 用例锁住它。
 
-### S2 — 解析器（2–3 天）
+### S2 — 解析器 ✅
 
-- 产出：`src/osl/self/parser.osl`，约 700 行，导出 `parse(src) -> Program`
-- 建议用**优先级爬升**而不是十层函数下降：帧数少、步数少、嵌套深度上限更高
-  （宿主的十层下降在 OSL 里每层约 10 帧，嵌套 80 层括号就会触顶）
-- 验收：`node .tmp/devkit.cjs ast` 对 20 个文件全部 ✓（键集合完全一致）
+- 产出：`src/osl/self/parser.osl`（634 行）导出 `parse(src) -> Program`
+- 用**优先级爬升**而不是十层函数下降：绑定力 `or 1 · and 2 · 比较 3 · +- 4 · */% 5 · ** 6`，
+  前缀 `-` 取右操作数 6（于是 `-a ** 2` = `-(a**2)`）、`not` 取 3（于是 `not a == b` = `not (a==b)`）
+- 验收：`pnpm devkit ast` —— **70 项全过**，字段、值、**键顺序**三者全一致；
+  语料里包含 `lexer.osl` 与 `parser.osl` 自己
+- 实测：**109 步/字符**（`shell.osl` 4 万字符 / 3.9 s）
+- 与宿主的唯一差异：宿主的括号 lambda 用 try/rollback 试解析（`parser.ts:567`），
+  这里换成确定性 lookahead，接受的语言完全相同，但不再有异常开销
 
-高频坑：
+六个已知的坑（全部已覆盖，实现时没有一个需要特殊处理）：
 
-1. `(` 开头的 lambda 回退：需要 try/except + `pos` 回滚（`parser.ts:567`）；
-2. 三元两种写法归一成 `Ternary`；
-3. `not in` / `is not` 是双 token 组合，`in` / `is` 是 `NAME` 不是 `OP`；
-4. 切片 `[a:b]` 两端都可省，缺省是 `null` 而不是 `None` 节点；
-5. `fn(x):` 块体 lambda 与 `fn(x) => …` 产出不同节点（`LambdaBlock` vs `Lambda`）；
-6. `export` 是空操作，直接解析后面的语句（`parser.ts:145`）。
+1. 三元两种写法归一成 `Ternary`，`line` 取左侧表达式；
+2. `not in` / `is not` 是双 token 组合，`in` / `is` 是 `NAME` 不是 `OP`；
+3. 切片 `[a:b]` 两端都可省，缺省是 `null` 而不是 `None` 节点；
+4. `fn(x):` 块体 lambda 与 `fn(x) => …` 产出不同节点（`LambdaBlock` vs `Lambda`），
+   且 `defaults` 键只在 `fn(…)` 形式里出现；
+5. `export` 是空操作，直接解析后面的语句（`parser.ts:145`）；
+6. 块体 lambda 只能出现在块的最后一条语句（[07-ast.md](osl/07-ast.md#已知缺陷)，
+   自举侧照抄现状，等 P2-4 一起修）。
 
 ### S3 — L0 半自举接线（0.5 天）
 
@@ -269,8 +287,8 @@ Windows 检出下的报错行号整体偏移。`src/osl/lexer.ts` 与 `self/lexe
 src/osl/
   lexer.ts parser.ts interp.ts builtins.ts    宿主实现（保持现状，做基准）
   self/
-    lexer.osl        S1
-    parser.osl       S2
+    lexer.osl        S1 ✅ 362 行
+    parser.osl       S2 ✅ 634 行
     interp.osl       S4
     stdlib.osl       S4
     runtime.osl      值类型、fmt、错误对象等公共部分
@@ -296,9 +314,9 @@ docs/
 | --- | --- | --- | --- |
 | 语言 | `tests/p0-lang.ts`：throw / 中断 / 列号 + 全语料解析回归 | `pnpm check` | 12 项全过 |
 | 词法 | `devkit tokens`：语料 × 两种换行 + 26 个极端用例 | `pnpm devkit tokens` | 66 项全过 |
-| 语法 | `devkit ast` 逐字段比对（键集合敏感） | `pnpm devkit ast` | 全部一致 |
+| 语法 | `devkit ast` 逐字段 + 键顺序比对 | `pnpm devkit ast` | 70 项全过 |
 | 语义 | conformance 套件的 stdout 逐字节比对 | 待建 | 100% 通过 |
-| 性能 | `devkit bench` 步/节点、前端总耗时 | `pnpm bench` | ≤35 步/节点、≤30 s |
+| 性能 | `devkit bench` 步/节点；`devkit frontend` 步/字符 | `pnpm bench` / `pnpm frontend` | ≤35 步/节点、≤200 步/字符 |
 
 `devkit` 的两个比对子命令在自举源码不存在时只打印提示并正常退出，所以 harness
 先于实现落地——S0 已经把它接进 CI（`check.yml`），S1 一提交就开始有真实信号。
@@ -336,7 +354,7 @@ docs/
 - [x] S0 地基：P0-1 `throw` / P0-2 构造参数与 `onTick` / P0-3 列号
 - [x] S0 工具：`devkit` + `tests/p0-lang.ts` 接进 CI（`check.yml`）
 - [x] S1 词法器：`src/osl/self/lexer.osl` 通过 `tokens` 比对（66 项）
-- [ ] S2 解析器通过 `ast` 比对
+- [x] S2 解析器：`src/osl/self/parser.osl` 通过 `ast` 比对（70 项，含键顺序）
 - [ ] S3 L0 半自举接线，IDE 可选前端
 - [ ] S4 求值器 + conformance 套件
 - [ ] S5 L2 两级自举跑通 `hello.osl`
