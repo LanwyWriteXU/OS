@@ -1,0 +1,362 @@
+# lexer.osl — the OSL lexer, written in OSL (bootstrap stage S1).
+#
+# Produces exactly the token stream of src/osl/lexer.ts:
+#
+#   {"t": "NAME", "v": "let", "line": 1, "col": 1}
+#
+# Tokens without a value carry no "v" key at all. Strings carry
+# {"s": <raw template>, "f": <is f-string>}.
+#
+# Entry point:  lex(src) -> list of tokens
+
+const ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "0": "\0", "\\": "\\", "\"": "\"", "'": "'", "`": "`"}
+const OPS2 = ["==", "!=", "<=", ">=", "//", "**", "+=", "-=", "*=", "/=", "%=", "=>", "->", "&&", "||"]
+const SINGLE = "+-*/%<>=()[]{},:.?!"
+const OPENERS = "([{"
+const CLOSERS = ")]}"
+
+
+fn isDigit(c):
+    let k = ord(c)
+    return k >= 48 and k <= 57
+
+
+fn isNameStart(c):
+    let k = ord(c)
+    if k >= 65 and k <= 90:
+        return True
+    if k >= 97 and k <= 122:
+        return True
+    return k == 95 or k == 36
+
+
+fn isNamePart(c):
+    if isDigit(c):
+        return True
+    return isNameStart(c)
+
+
+fn hexVal(c):
+    let k = ord(c)
+    if k >= 48 and k <= 57:
+        return k - 48
+    if k >= 97 and k <= 102:
+        return k - 87
+    if k >= 65 and k <= 70:
+        return k - 55
+    return -1
+
+
+class Lexer:
+    fn init(src):
+        self.src = src
+        self.n = len(src)
+        self.i = 0
+        self.line = 1
+        self.col0 = 0        # index of the first character of the current line
+        self.depth = 0       # bracket depth; newlines inside ()[]{} are ignored
+        self.indents = [0]
+        self.toks = []
+        self.atLineStart = True
+
+    # ---------------------------------------------------------- output
+
+    # `at` / `col` let the caller report a position captured before the token
+    # was scanned — a triple-quoted string spans lines, so the running
+    # `self.col0` is useless by the time it is pushed.
+    fn push(t, v = None, at = -1, col = -1):
+        let idx = self.i
+        if at >= 0:
+            idx = at
+        let c = col
+        if c < 0:
+            c = idx - self.col0 + 1
+        let tok = {"t": t}
+        if v != None:
+            tok["v"] = v
+        tok["line"] = self.line
+        tok["col"] = c
+        self.toks.append(tok)
+
+    fn lastTok():
+        if len(self.toks) == 0:
+            return None
+        return self.toks[len(self.toks) - 1]
+
+    # ----------------------------------------------------- indentation
+
+    # Consumes leading whitespace and emits INDENT / DEDENT. Blank lines and
+    # comment-only lines produce no tokens at all.
+    fn indentation():
+        let src = self.src
+        let n = self.n
+        let j = self.i
+        let ind = 0
+        while j < n:
+            let c = src[j]
+            if c == " ":
+                ind += 1
+            elif c == "\t":
+                ind += 4
+            else:
+                break
+            j += 1
+
+        if j >= n:
+            self.i = j
+            return
+
+        let c = src[j]
+        if c == "\n" or c == "\r":
+            # blank line: CRLF counts as one line, not two
+            let k = j + 1
+            if c == "\r" and k < n and src[k] == "\n":
+                k += 1
+            self.i = k
+            self.line += 1
+            self.col0 = k
+            return
+
+        if c == "#":
+            while j < n and src[j] != "\n":
+                j += 1
+            if j < n:
+                j += 1
+                self.line += 1
+                self.col0 = j
+            self.i = j
+            return
+
+        let top = self.indents[len(self.indents) - 1]
+        if ind > top:
+            self.indents.append(ind)
+            self.push("INDENT", None, j)
+        elif ind < top:
+            while ind < self.indents[len(self.indents) - 1]:
+                self.indents.pop()
+                self.push("DEDENT", None, j)
+            if ind != self.indents[len(self.indents) - 1]:
+                raise "Inconsistent indentation (line " + str(self.line) + ")"
+        self.i = j
+        self.atLineStart = False
+
+    # ---------------------------------------------------------- driver
+
+    fn run():
+        while self.i < self.n:
+            if self.atLineStart and self.depth == 0:
+                self.indentation()
+                continue
+            self.scanToken()
+        self.finish()
+        return self.toks
+
+    fn finish():
+        let last = self.lastTok()
+        if last != None and last.t != "NEWLINE" and last.t != "INDENT":
+            self.push("NEWLINE")
+        while len(self.indents) > 1:
+            self.indents.pop()
+            self.push("DEDENT")
+        self.push("EOF")
+
+    # ----------------------------------------------------------- scans
+
+    fn scanToken():
+        let src = self.src
+        let n = self.n
+        let ch = src[self.i]
+
+        if ch == " " or ch == "\t" or ch == "\r":
+            self.i += 1
+            return
+
+        # explicit line continuation
+        if ch == "\\" and self.i + 1 < n and src[self.i + 1] == "\n":
+            self.i += 2
+            self.line += 1
+            self.col0 = self.i
+            return
+
+        if ch == "\n":
+            # Only a newline at bracket depth 0 ends a statement and starts a
+            # new logical line; inside ()[]{} it is just whitespace.
+            if self.depth == 0:
+                let last = self.lastTok()
+                if last == None or (last.t != "NEWLINE" and last.t != "INDENT" and last.t != "DEDENT"):
+                    self.push("NEWLINE")
+                self.atLineStart = True
+            self.i += 1
+            self.line += 1
+            self.col0 = self.i
+            return
+
+        if ch == "#":
+            while self.i < n and src[self.i] != "\n":
+                self.i += 1
+            return
+
+        # f-string: keep the raw template, interpolation happens at eval time
+        if (ch == "f" or ch == "F") and self.i + 1 < n and (src[self.i + 1] == "\"" or src[self.i + 1] == "'"):
+            let start = self.i
+            let startCol = self.i - self.col0 + 1
+            let q = src[self.i + 1]
+            let triple = src.slice(self.i + 1, self.i + 4) == q.repeat(3)
+            self.i += 1
+            let s = self.readString(q, triple)
+            self.push("STRING", {"s": s, "f": True}, start, startCol)
+            return
+
+        if ch == "\"" or ch == "'":
+            let start = self.i
+            let startCol = self.i - self.col0 + 1
+            let triple = src.slice(self.i, self.i + 3) == ch.repeat(3)
+            let s = self.readString(ch, triple)
+            self.push("STRING", {"s": s, "f": False}, start, startCol)
+            return
+
+        if isDigit(ch) or (ch == "." and self.i + 1 < n and isDigit(src[self.i + 1])):
+            let start = self.i
+            self.i = self.numberEnd(start)
+            self.push("NUMBER", float(src.slice(start, self.i).replace("_", "")), start)
+            return
+
+        if isNameStart(ch):
+            let start = self.i
+            let j = self.i
+            while j < n and isNamePart(src[j]):
+                j += 1
+            self.push("NAME", src.slice(start, j), start)
+            self.i = j
+            return
+
+        let three = src.slice(self.i, self.i + 3)
+        if three == "**=":
+            self.push("OP", three)
+            self.i += 3
+            return
+
+        let two = src.slice(self.i, self.i + 2)
+        if two in OPS2:
+            self.push("OP", two)
+            self.i += 2
+            return
+
+        if ch in SINGLE:
+            if ch in OPENERS:
+                self.depth += 1
+            elif ch in CLOSERS:
+                self.depth -= 1
+                if self.depth < 0:
+                    self.depth = 0
+            self.push("OP", ch)
+            self.i += 1
+            return
+
+        # `;` is a statement separator, i.e. a newline
+        if ch == ";":
+            if self.depth == 0:
+                let last = self.lastTok()
+                if last != None and last.t != "NEWLINE":
+                    self.push("NEWLINE")
+            self.i += 1
+            return
+
+        raise "Unexpected character '" + ch + "' (line " + str(self.line) + ")"
+
+    fn numberEnd(start):
+        let src = self.src
+        let n = self.n
+        let j = start
+        while j < n and (isDigit(src[j]) or src[j] == "_"):
+            j += 1
+        if j < n and src[j] == "." and j + 1 < n and isDigit(src[j + 1]):
+            j += 1
+            while j < n and (isDigit(src[j]) or src[j] == "_"):
+                j += 1
+        if j < n and (src[j] == "e" or src[j] == "E"):
+            let k = j + 1
+            if k < n and (src[k] == "+" or src[k] == "-"):
+                k += 1
+            if k < n and isDigit(src[k]):
+                j = k
+                while j < n and isDigit(src[j]):
+                    j += 1
+        return j
+
+    fn hexToInt(a, b):
+        let src = self.src
+        let n = self.n
+        let v = 0
+        let k = a
+        while k < b:
+            if k >= n:
+                return v
+            let d = hexVal(src[k])
+            if d < 0:
+                return v
+            v = v * 16 + d
+            k += 1
+        return v
+
+    fn readString(quote, triple):
+        let src = self.src
+        let n = self.n
+        let out = ""
+        let startCol = self.i - self.col0 + 1
+        let closer = quote + quote + quote
+        if triple:
+            self.i += 3
+        else:
+            self.i += 1
+
+        while self.i < n:
+            if triple:
+                if src.slice(self.i, self.i + 3) == closer:
+                    self.i += 3
+                    return out
+            elif src[self.i] == quote:
+                self.i += 1
+                return out
+
+            let c = src[self.i]
+            if c == "\\":
+                if self.i + 1 >= n:
+                    self.i += 1
+                    continue
+                let e = src[self.i + 1]
+                if e == "u" and self.i + 2 < n and src[self.i + 2] == "{":
+                    let close = src.find("}", self.i + 3)
+                    if close > 0:
+                        out += chr(self.hexToInt(self.i + 3, close))
+                        self.i = close + 1
+                        continue
+                if e == "x":
+                    out += chr(self.hexToInt(self.i + 2, self.i + 4))
+                    self.i += 4
+                    continue
+                let m = ESCAPES.get(e, None)
+                if m != None:
+                    out += m
+                else:
+                    out += e
+                self.i += 2
+                continue
+
+            if c == "\n":
+                if not triple:
+                    raise "Unterminated string literal (line " + str(self.line) + ", col " + str(startCol) + ")"
+                self.line += 1
+                self.col0 = self.i + 1
+                out += "\n"
+                self.i += 1
+                continue
+
+            out += c
+            self.i += 1
+
+        raise "Unterminated string literal (line " + str(self.line) + ", col " + str(startCol) + ")"
+
+
+fn lex(src):
+    return Lexer(src).run()

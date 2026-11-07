@@ -229,8 +229,8 @@ for nd in nodes:
       nodes += countNodes(parseProgram(src));
     }
     line(`语料   ${files.length} 个文件 / ${lines} 行 / ${chars.toLocaleString()} 字符 / ${toks.toLocaleString()} token / ${nodes.toLocaleString()} AST 节点`);
-    const perChar = 40; // lexer 每字符 30–60 步的经验区间
-    const perTok = 200; // 十层优先级下降 + 建节点
+    const perChar = 67; // 实测：src/osl/self/lexer.osl 约 67 步/字符
+    const perTok = 200; // 估算：优先级下降 + 建节点，S2 落地后替换为实测值
     const lexSteps = chars * perChar;
     const parseSteps = toks * perTok;
     const rate = 450_000;
@@ -253,6 +253,57 @@ for nd in nodes:
   }
 }
 
+/**
+ * 极端用例：语料里没出现、但词法器必须支持的写法。没有这一层，"通过"只证明
+ * 适配了现有文件。
+ */
+const EDGE_CASES = [
+  'a = 1\n',
+  'if a:\n    b\n',
+  'if a:\n\tb\n',
+  'a = 1; b = 2\n',
+  'a = 1 + \\\n    2\n',
+  'a = "x\\n\\t\\\\ \\"y\\" \\x41 \\u{1F600}"\n',
+  'a = """line1\nline2\n"""\n',
+  'a = "single"\nf = f"v={a}"\n',
+  'a = .5 + 1_000 + 1e9 + 2.5e-3\n',
+  'x **= 2\n',
+  'a = [1,\n  2,\n]\n',
+  'a = [\n    1,\n]\n\nb\n',
+  'for k, v in d:\n    pass\n',
+  'a = b if c else d\n',
+  'a = b ? c : d\n',
+  'a = x => x * 2\n',
+  'a = (x, y) => x\n',
+  'class K extends B:\n    fn init(x):\n        self.x = x\n',
+  'try:\n    a\nexcept e:\n    b\nfinally:\n    c\n',
+  'throw {"k": 1}\n',
+  '# only a comment\n',
+  '\n\n\n',
+  'a = 1  # tail comment\n',
+  'if a:\n    if b:\n        c\nd\n',
+  // CRLF：空行只能算一行（否则之后所有行号整体漂移）
+  'a = 1\r\n\r\nlet b = 2\r\n',
+  'a = [\r\n    1,\r\n]\r\n\r\nb\r\n',
+];
+
+function compareOne(label: string, src: string, kind: 'tokens' | 'ast', call: (s: string) => any): boolean {
+  let got: any;
+  try {
+    got = plain(call(src));
+  } catch (e: any) {
+    console.log(`✗ ${label}\n    自举侧抛错：${String(e.message).split('\n')[0]}`);
+    return false;
+  }
+  const want = kind === 'tokens' ? lex(src) : parseProgram(src);
+  const d = diffValue(want, got);
+  if (d.length) {
+    console.log(`✗ ${label}\n    ${d.slice(0, 4).join('\n    ')}`);
+    return false;
+  }
+  return true;
+}
+
 function compareCorpus(kind: 'tokens' | 'ast') {
   const file = kind === 'tokens' ? SELF_LEXER : SELF_PARSER;
   if (!existsSync(file)) {
@@ -262,26 +313,34 @@ function compareCorpus(kind: 'tokens' | 'ast') {
   const fn = kind === 'tokens' ? 'lex' : 'parse';
   const call = loadSelfModule(file, fn, '');
   let bad = 0;
+  let total = 0;
+
+  // 1) 仓库里的全部 .osl，原样与归一化成 LF 各跑一遍——CRLF 下的空行计数是
+  //    宿主的一个历史行为，必须一起对齐
   for (const f of oslFiles()) {
-    const src = readFileSync(f, 'utf8');
-    let got: any;
-    try {
-      got = plain(call(src));
-    } catch (e: any) {
-      console.log(`✗ ${f}\n    自举侧抛错：${String(e.message).split('\n')[0]}`);
-      bad++;
-      continue;
-    }
-    const want = kind === 'tokens' ? lex(src) : parseProgram(src);
-    const d = diffValue(want, got);
-    if (d.length) {
-      bad++;
-      console.log(`✗ ${f}\n    ${d.slice(0, 4).join('\n    ')}`);
-    } else {
-      console.log(`✓ ${f}`);
+    const raw = readFileSync(f, 'utf8');
+    const variants: Array<[string, string]> = [
+      ['', raw],
+      [' (LF)', raw.replace(/\r\n/g, '\n')],
+    ];
+    for (const [tag, src] of variants) {
+      total++;
+      if (compareOne(f + tag, src, kind, call)) console.log(`✓ ${f}${tag}`);
+      else bad++;
     }
   }
-  console.log(`\n${bad === 0 ? '全部一致' : `${bad} 个文件不一致`}`);
+
+  // 2) 极端用例
+  if (kind === 'tokens') {
+    for (let k = 0; k < EDGE_CASES.length; k++) {
+      total++;
+      const label = `case ${String(k).padStart(2, '0')} ${JSON.stringify(EDGE_CASES[k]).slice(0, 44)}`;
+      if (compareOne(label, EDGE_CASES[k], kind, call)) console.log(`✓ ${label}`);
+      else bad++;
+    }
+  }
+
+  console.log(`\n${bad === 0 ? `全部一致（${total} 项）` : `${bad} / ${total} 项不一致`}`);
   return bad === 0 ? 0 : 1;
 }
 

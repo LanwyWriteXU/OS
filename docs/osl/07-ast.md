@@ -20,12 +20,16 @@ Program  { type, body[] }
 
 ## Token 流
 
-`lex()` 产出 `{ t, v, line, col }`，自举词法器必须一模一样：
+`lex()` 产出 `{ t, v, line, col }`，自举词法器（`src/osl/self/lexer.osl`）必须一模一样：
 
+- **没有值的 token 完全没有 `v` 键**。不是 `v: null`，也不是 `v: undefined` ——
+  序列化后差别很大，比对器按"键集合完全相等"判定；
 - `col` 从 1 开始，按**字符**计（一个 Tab 算 1 列；缩进宽度计算时 Tab 才算 4）；
 - `INDENT` / `DEDENT` 的 `col` 指向该行第一个非空白字符；
+- 跨行 token（三引号字符串）的 `col` 取**起始**位置，不是结束位置；
 - `STRING` 的 `v` 是 `{ s, f }`，`s` 是**未插值**的原始模板；
-- `NUMBER` 的 `v` 已经是 number（`_` 分隔符已去掉）。
+- `NUMBER` 的 `v` 已经是 number（`_` 分隔符已去掉）；
+- LF 与 CRLF 报出的 `line` 一致（1.1 修掉了 CRLF 空行被算成两行的偏移）。
 
 语法错误里带 `col`：`Unexpected token '}' (line 64, col 12)`。
 

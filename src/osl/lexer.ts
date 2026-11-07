@@ -43,7 +43,15 @@ export function lex(src: string): Token[] {
 
   /** 1-based column for a source index — scanning back to the previous newline. */
   const colAt = (idx: number) => idx - src.lastIndexOf('\n', idx - 1);
-  const push = (t: Token['t'], v?: any, at: number = i) => toks.push({ t, v, line, col: colAt(at) });
+  // A token without a value carries no `v` key at all — the bootstrap lexer
+  // has to reproduce that shape exactly, so don't emit `v: undefined`.
+  const push = (t: Token['t'], v?: any, at: number = i) => {
+    const tok = { t } as Token;
+    if (v !== undefined) tok.v = v;
+    tok.line = line;
+    tok.col = colAt(at);
+    toks.push(tok);
+  };
 
   const readString = (quote: string, f: boolean, triple: boolean): string => {
     let out = '';
@@ -110,7 +118,10 @@ export function lex(src: string): Token[] {
         break;
       }
       if (src[j] === '\n' || src[j] === '\r') {
+        // A blank line advances by one line, not one character: CRLF must not
+        // be counted twice or every later line number drifts.
         i = j + 1;
+        if (src[j] === '\r' && src[i] === '\n') i++;
         line++;
         continue;
       }
