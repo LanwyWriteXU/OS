@@ -150,3 +150,6 @@ vite.config.ts.timestamp-*
 
 # Agent workspace data
 .workbuddy/
+
+# devkit 临时产物
+.tmp/

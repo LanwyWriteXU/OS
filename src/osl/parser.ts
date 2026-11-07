@@ -39,16 +39,16 @@ export class Parser {
   expect(t: Token['t'], msg = ''): Token {
     if (!this.at(t)) {
       const tok = this.peek();
-      throw new OslSyntaxError(msg || `Expected ${t} but found ${tok.t}${tok.v ? ` '${tok.v}'` : ''}`, tok.line);
+      throw new OslSyntaxError(msg || `Expected ${t} but found ${tok.t}${tok.v ? ` '${tok.v}'` : ''}`, tok.line, tok.col);
     }
     return this.next();
   }
   expectOp(v: string): Token {
-    if (!this.atOp(v)) throw new OslSyntaxError(`Expected '${v}'`, this.peek().line);
+    if (!this.atOp(v)) throw new OslSyntaxError(`Expected '${v}'`, this.peek().line, this.peek().col);
     return this.next();
   }
   expectKw(v: string): Token {
-    if (!this.atKw(v)) throw new OslSyntaxError(`Expected '${v}'`, this.peek().line);
+    if (!this.atKw(v)) throw new OslSyntaxError(`Expected '${v}'`, this.peek().line, this.peek().col);
     return this.next();
   }
   expectName(): string {
@@ -60,7 +60,7 @@ export class Parser {
     else if (this.at('DEDENT') || this.at('EOF')) {
       /* ok */
     } else if (this.at('OP') && this.peek().v === ';') this.next();
-    else throw new OslSyntaxError(`Unexpected token '${this.peek().v ?? this.peek().t}'`, this.peek().line);
+    else throw new OslSyntaxError(`Unexpected token '${this.peek().v ?? this.peek().t}'`, this.peek().line, this.peek().col);
   }
 
   /* ---------------------------------------------------------- program */
@@ -139,6 +139,16 @@ export class Parser {
           const value = this.parseExpression();
           this.endStatement();
           return { type: 'Raise', value, line };
+        }
+        case 'throw': {
+          // `throw v` carries an arbitrary value; `except e` binds v itself
+          // instead of an error object. Used for non-local control flow.
+          this.next();
+          const value: Node = this.at('NEWLINE') || this.at('DEDENT') || this.at('EOF')
+            ? { type: 'None' }
+            : this.parseExpression();
+          this.endStatement();
+          return { type: 'Throw', value, line };
         }
         case 'try':
           return this.parseTry();
@@ -265,7 +275,7 @@ export class Parser {
       }
       if (this.atKw('fn')) methods.push(this.parseFnDecl());
       else if (this.atKw('pass')) this.next();
-      else throw new OslSyntaxError('Only methods are allowed in a class body', this.peek().line);
+      else throw new OslSyntaxError('Only methods are allowed in a class body', this.peek().line, this.peek().col);
     }
     this.expect('DEDENT');
     return { type: 'ClassDecl', name, parent, methods, line: kw.line };
@@ -508,7 +518,7 @@ export class Parser {
         let name: string;
         if (this.at('NAME')) name = this.expectName();
         else if (this.at('NUMBER')) name = String(this.next().v);
-        else throw new OslSyntaxError('Expected a property name', tok.line);
+        else throw new OslSyntaxError('Expected a property name', tok.line, tok.col);
         expr = { type: 'Member', obj: expr, name, line: tok.line };
         continue;
       }
@@ -621,7 +631,7 @@ export class Parser {
       return { type: 'Dict', pairs, line: tok.line };
     }
 
-    throw new OslSyntaxError(`Unexpected token '${tok.v ?? tok.t}'`, tok.line);
+    throw new OslSyntaxError(`Unexpected token '${tok.v ?? tok.t}'`, tok.line, tok.col);
   }
 }
 

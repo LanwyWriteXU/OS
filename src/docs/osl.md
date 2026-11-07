@@ -292,6 +292,21 @@ synonyms. The caught value has .message, .type and .line.
 
 Built-in error constructors: Error, TypeError, ValueError, RangeError.
 
+raise always produces an error object, so the message gets stringified. When
+you need to hand a value somewhere, use throw — the caught value is exactly
+what you threw:
+
+```osl
+try:
+    throw {"kind": "ret", "value": 42}
+except e:
+    print(e.kind)    # ret
+    print(e.value)   # 42
+```
+
+throw also runs finally blocks and crosses function calls. An uncaught throw
+becomes a normal "uncaught throw" error.
+
 ## 13. Modules
 
 Split code across files and import them by path. The path is a VFS path and

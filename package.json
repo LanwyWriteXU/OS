@@ -8,9 +8,13 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 4173"
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "check": "tsc --noEmit && esbuild tests/p0-lang.ts --bundle --platform=node --format=cjs --outfile=.tmp/p0-lang.cjs && node .tmp/p0-lang.cjs",
+    "bench": "esbuild tools/osl-devkit.ts --bundle --platform=node --format=cjs --outfile=.tmp/devkit.cjs && node .tmp/devkit.cjs bench",
+    "devkit": "esbuild tools/osl-devkit.ts --bundle --platform=node --format=cjs --outfile=.tmp/devkit.cjs"
   },
   "devDependencies": {
+    "esbuild": "0.21.5",
     "typescript": "^5.6.3",
     "vite": "^5.4.10"
   }

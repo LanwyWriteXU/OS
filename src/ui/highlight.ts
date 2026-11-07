@@ -9,7 +9,7 @@
 const KEYWORDS = new Set([
   'let', 'var', 'const', 'fn', 'class', 'if', 'elif', 'else', 'while', 'for', 'in',
   'return', 'break', 'continue', 'pass', 'and', 'or', 'not', 'True', 'False', 'None',
-  'true', 'false', 'nil', 'null', 'try', 'except', 'finally', 'raise', 'import', 'from',
+  'true', 'false', 'nil', 'null', 'try', 'except', 'finally', 'raise', 'throw', 'import', 'from',
   'as', 'extends', 'export', 'is',
 ]);
 

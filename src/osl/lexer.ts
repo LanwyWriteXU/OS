@@ -6,22 +6,27 @@
 export interface Token {
   t: 'NEWLINE' | 'INDENT' | 'DEDENT' | 'NAME' | 'NUMBER' | 'STRING' | 'OP' | 'EOF';
   v?: any;
+  /** 1-based line of the token start. */
   line: number;
+  /** 1-based column of the token start, counted in characters (tab = 1). */
+  col: number;
 }
 
 export class OslSyntaxError extends Error {
   line: number;
-  constructor(message: string, line: number) {
-    super(`${message} (line ${line})`);
+  col: number;
+  constructor(message: string, line: number, col = 0) {
+    super(col ? `${message} (line ${line}, col ${col})` : `${message} (line ${line})`);
     this.name = 'OslSyntaxError';
     this.line = line;
+    this.col = col;
   }
 }
 
 export const KEYWORDS = new Set([
   'let', 'var', 'const', 'fn', 'class', 'if', 'elif', 'else', 'while', 'for', 'in', 'return',
   'break', 'continue', 'pass', 'and', 'or', 'not', 'True', 'False', 'None', 'try', 'catch',
-  'except', 'finally', 'raise', 'import', 'from', 'as', 'self', 'do', 'is',
+  'except', 'finally', 'raise', 'throw', 'import', 'from', 'as', 'self', 'do', 'is',
 ]);
 
 const OPS3 = ['**='];
@@ -36,10 +41,13 @@ export function lex(src: string): Token[] {
   let depth = 0;
   const indents: number[] = [0];
 
-  const push = (t: Token['t'], v?: any) => toks.push({ t, v, line });
+  /** 1-based column for a source index — scanning back to the previous newline. */
+  const colAt = (idx: number) => idx - src.lastIndexOf('\n', idx - 1);
+  const push = (t: Token['t'], v?: any, at: number = i) => toks.push({ t, v, line, col: colAt(at) });
 
   const readString = (quote: string, f: boolean, triple: boolean): string => {
     let out = '';
+    const startCol = colAt(i);
     i += triple ? 3 : 1;
     while (i < n) {
       if (triple) {
@@ -77,7 +85,7 @@ export function lex(src: string): Token[] {
         continue;
       }
       if (src[i] === '\n') {
-        if (!triple) throw new OslSyntaxError('Unterminated string literal', line);
+        if (!triple) throw new OslSyntaxError('Unterminated string literal', line, startCol);
         line++;
         out += '\n';
         i++;
@@ -86,7 +94,7 @@ export function lex(src: string): Token[] {
       out += src[i];
       i++;
     }
-    throw new OslSyntaxError('Unterminated string literal', line);
+    throw new OslSyntaxError('Unterminated string literal', line, startCol);
   };
 
   while (i < n) {
@@ -118,13 +126,13 @@ export function lex(src: string): Token[] {
       const top = indents[indents.length - 1];
       if (ind > top) {
         indents.push(ind);
-        push('INDENT');
+        push('INDENT', undefined, j);
       } else if (ind < top) {
         while (ind < indents[indents.length - 1]) {
           indents.pop();
-          push('DEDENT');
+          push('DEDENT', undefined, j);
         }
-        if (ind !== indents[indents.length - 1]) throw new OslSyntaxError('Inconsistent indentation', line);
+        if (ind !== indents[indents.length - 1]) throw new OslSyntaxError('Inconsistent indentation', line, colAt(j));
       }
       i = j;
       atLineStart = false;
@@ -161,16 +169,18 @@ export function lex(src: string): Token[] {
     if ((ch === 'f' || ch === 'F') && (src[i + 1] === '"' || src[i + 1] === "'")) {
       const quote = src[i + 1];
       const triple = src.slice(i + 1, i + 4) === quote.repeat(3);
+      const start = i;
       i++;
       const s = readString(quote, true, triple);
-      push('STRING', { s, f: true });
+      push('STRING', { s, f: true }, start);
       continue;
     }
 
     if (ch === '"' || ch === "'") {
+      const start = i;
       const triple = src.slice(i, i + 3) === ch.repeat(3);
       const s = readString(ch, false, triple);
-      push('STRING', { s, f: false });
+      push('STRING', { s, f: false }, start);
       continue;
     }
 
@@ -231,7 +241,7 @@ export function lex(src: string): Token[] {
       continue;
     }
 
-    throw new OslSyntaxError(`Unexpected character '${ch}'`, line);
+    throw new OslSyntaxError(`Unexpected character '${ch}'`, line, colAt(i));
   }
 
   const last = toks[toks.length - 1];

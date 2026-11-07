@@ -15,6 +15,7 @@
 | [osl/04-errors.md](osl/04-errors.md) | 异常、类型化错误、栈追踪、执行限制 |
 | [osl/05-modules.md](osl/05-modules.md) | 多文件：import / from、解析规则、缓存 |
 | [osl/06-stdlib.md](osl/06-stdlib.md) | 全局函数与标准库命名空间 |
+| [osl/07-ast.md](osl/07-ast.md) | AST 契约：节点字段、行号来源、自举比对约定 |
 
 ## OML — Origin Markup Language
 
@@ -34,6 +35,15 @@
 | --- | --- |
 | [apps/ide.md](apps/ide.md) | IDE：布局、快捷键、运行模型与实现 |
 | [apps/utilities.md](apps/utilities.md) | Tasks、Clock、Preview、Logs 与系统设置项 |
+
+## 自举
+
+用 OSL 写一个 OSL 解释器，从半自举（只换前端）一路到两级自举。
+
+| 文档 | 内容 |
+| --- | --- |
+| [bootstrap.md](bootstrap.md) | 完整开发链路：基线实测、前置改造、S0–S6 阶段、验收命令、性能预算、风险 |
+| [osl/07-ast.md](osl/07-ast.md) | 自举解析器必须产出的 AST 结构 |
 
 ## 其他
 

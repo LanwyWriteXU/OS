@@ -134,6 +134,22 @@ class ReturnSignal {
 }
 class BreakSignal {}
 class ContinueSignal {}
+/**
+ * `throw v` 产生的信号：携带任意值，`except e` 绑定的就是 v 本身，
+ * 而不是被字符串化后的错误对象。
+ */
+export class ThrownSignal {
+  constructor(public value: any) {}
+}
+
+export interface InterpreterOptions {
+  maxSteps?: number;
+  maxDepth?: number;
+  /** 每执行 `tickEvery` 步回调一次；回调里抛异常即中断本次执行。 */
+  onTick?: (steps: number, line: number) => void;
+  /** 两次 onTick 之间的最小步数，默认 50 000（约 0.1 s）。 */
+  tickEvery?: number;
+}
 
 export function isCallable(v: any): boolean {
   return v instanceof OslFunction || v instanceof NativeFunction || v instanceof OslClass;
@@ -151,6 +167,11 @@ export class Interpreter {
   maxSteps = 4_000_000;
   depth = 0;
   maxDepth = 180;
+  /** 进度 / 中断钩子，见 InterpreterOptions。 */
+  onTick: ((steps: number, line: number) => void) | null = null;
+  tickEvery = 50_000;
+  private tickAt = 50_000;
+  private cancelRequested = false;
   print: (s: string) => void = (s) => console.log(s);
   private exprCache = new Map<string, Node>();
   private stmtCache = new Map<string, Node>();
@@ -166,7 +187,12 @@ export class Interpreter {
   private callStack: Array<{ name: string; line: number }> = [];
   private currentLine = 0;
 
-  constructor(builtins: Record<string, any> = {}) {
+  constructor(builtins: Record<string, any> = {}, options: InterpreterOptions = {}) {
+    if (options.maxSteps !== undefined) this.maxSteps = options.maxSteps;
+    if (options.maxDepth !== undefined) this.maxDepth = options.maxDepth;
+    if (options.tickEvery !== undefined) this.tickEvery = options.tickEvery;
+    if (options.onTick) this.onTick = options.onTick;
+    this.tickAt = this.tickEvery;
     for (const [k, v] of Object.entries(builtins)) this.globals.define(k, v);
   }
 
@@ -181,6 +207,13 @@ export class Interpreter {
   reset() {
     this.steps = 0;
     this.depth = 0;
+    this.tickAt = this.tickEvery;
+    this.cancelRequested = false;
+  }
+
+  /** 请求中止当前执行：下一个 tick 抛出 OslError。`run()` 开始时自动清除。 */
+  requestCancel() {
+    this.cancelRequested = true;
   }
 
   /* ------------------------------------------------------------ modules */
@@ -286,7 +319,14 @@ export class Interpreter {
 
   private wrap(e: any): Error {
     if (e instanceof OslSyntaxError) return e;
-    const err = e instanceof OslError ? e : e instanceof OslErrorValue ? this.fromErrorValue(e) : new OslError(e instanceof Error ? e.message : String(e));
+    const err =
+      e instanceof ThrownSignal
+        ? new OslError(`未捕获的 throw: ${this.toStr(e.value)}`)
+        : e instanceof OslError
+        ? e
+        : e instanceof OslErrorValue
+        ? this.fromErrorValue(e)
+        : new OslError(e instanceof Error ? e.message : String(e));
     if (!err.decorated) {
       err.decorated = true;
       if (!err.line && this.currentLine) err.line = this.currentLine;
@@ -451,6 +491,9 @@ export class Interpreter {
       case 'Pass':
         return;
 
+      case 'Throw':
+        throw new ThrownSignal(this.eval(node.value, env));
+
       case 'Raise': {
         const v = this.eval(node.value, env);
         if (v instanceof OslErrorValue) throw v;
@@ -473,7 +516,7 @@ export class Interpreter {
         } catch (e) {
           if (e instanceof ReturnSignal || e instanceof BreakSignal || e instanceof ContinueSignal) throw e;
           if (!node.catchBody) throw e;
-          env.define(node.catchName, this.toErrorValue(e));
+          env.define(node.catchName, e instanceof ThrownSignal ? e.value : this.toErrorValue(e));
           this.execBlock(node.catchBody, env);
         } finally {
           if (node.finallyBody) this.execBlock(node.finallyBody, env);
@@ -513,7 +556,12 @@ export class Interpreter {
   eval(node: Node, env: Env): any {
     if (node.line) this.currentLine = node.line;
     if (++this.steps > this.maxSteps) {
-      throw new OslError('Execution limit reached — possible infinite loop');
+      throw new OslError('Execution limit reached — possible infinite loop', node.line);
+    }
+    if (this.steps >= this.tickAt) {
+      this.tickAt = this.steps + this.tickEvery;
+      if (this.cancelRequested) throw new OslError('执行已取消', node.line);
+      if (this.onTick) this.onTick(this.steps, this.currentLine);
     }
     switch (node.type) {
       case 'Num':

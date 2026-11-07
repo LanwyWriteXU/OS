@@ -12,6 +12,27 @@ raise TypeError("expected a number")
 - 如果字符串形如 `"ValueError: 内容"`，类型会被自动识别。
 - 四个内建构造器：`Error`、`TypeError`、`ValueError`、`RangeError`。
 
+## throw：携带任意值
+
+`raise` 只能抛错误：任何值都会被转成错误对象。需要**原样传递一个值**时用 `throw`，
+它主要用于非局部跳转（解释器里实现 `return` 就是这么做的）：
+
+```osl
+try:
+    throw {"kind": "ret", "value": 42}
+except e:
+    print(e.kind)      # ret
+    print(e.value)     # 42
+```
+
+| 语句 | `except e` 里的 `e` |
+| --- | --- |
+| `raise x` | 错误对象：`e.type` / `e.message` / `e.line` / `e.frames` |
+| `throw v` | **就是 `v` 本身**，不做任何包装 |
+
+`throw` 同样会被 `finally` 拦一道，也照样穿透函数调用；没被捕获时会变成一条
+`未捕获的 throw: …` 错误，而不是把裸值丢给宿主。
+
 ## 捕获
 
 ```osl
@@ -87,6 +108,23 @@ ValueError: deep (line 12)
 | 序列化深度 | 8 | OML 的 `For` 数据签名，超过则截断为 `…` |
 
 这些限制保护的是浏览器主线程：一段死循环脚本会以错误结束，而不是把页面卡死。
+
+宿主侧可以按实例调整这两条上限，并挂一个进度钩子（长任务靠它来报进度或中断）：
+
+```ts
+const interp = new Interpreter({}, {
+  maxSteps: 200_000_000,
+  maxDepth: 800,
+  tickEvery: 50_000,                      // 每约 0.1 秒一次
+  onTick: (steps, line) => {
+    if (tooLong()) throw new Error("超时");
+  },
+});
+interp.requestCancel();                   // 下一个 tick 抛「执行已取消」
+```
+
+`onTick` 里抛出的任何异常都会中止本次执行；`requestCancel()` 适合绑定一个取消按钮。
+`run()` 开始时会自动清掉取消标记。
 
 ## 调试
 

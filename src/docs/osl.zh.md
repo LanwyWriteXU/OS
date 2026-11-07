@@ -286,6 +286,18 @@ raise ValueError("count must be positive") 抛出错误；catch 与 except 是�
 
 内置错误构造器：Error、TypeError、ValueError、RangeError。
 
+raise 只能抛错误，值一律被字符串化。要把一个值原样送到 catch，用 throw：
+
+```osl
+try:
+    throw {"kind": "ret", "value": 42}
+except e:
+    print(e.kind)    # ret
+    print(e.value)   # 42
+```
+
+throw 同样会执行 finally、会穿透函数调用；没被捕获时报「未捕获的 throw」。
+
 ## 13. 模块
 
 把代码拆到多个文件，用路径导入。路径是虚拟文件系统路径，相对路径相对于
